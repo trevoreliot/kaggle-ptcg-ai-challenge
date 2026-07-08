@@ -10,14 +10,10 @@
 * Python Formatting: All Python code must strictly adhere to PEP 8 standards.
   Ensure clean readability, proper spacing, and informative docstrings.
 * Credential Management: ABSOLUTELY NO `.env` files or hardcoded API keys.
-  Since this is a Kaggle environment, all secrets (e.g., UMLS API keys, LLM keys)
+  Since this is a Kaggle environment, all secrets (e.g., LLM keys)
   must be stored and accessed exclusively via `kaggle_secrets.KaggleSecrets`.
 * Kaggle Optimization: Kaggle environments are ephemeral and have strict RAM/disk
   limits.
-  - Prefer lightweight, in-memory, or embedded databases like ChromaDB
-    for RAG tools rather than persistent servers.
-  - Chunk and parse the fixed-width and XML ICD-10 files efficiently using
-    Pandas and native Python XML libraries to avoid memory overflow.
 * Output Formatting: Refrain from using emojis in any output, documentation,
   or markdown. Use ASCII-style or org-mode decorators (e.g., [*], ===, ---).
 
