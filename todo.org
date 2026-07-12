@@ -1,0 +1,52 @@
+#+TITLE: Pokémon TCG AI Battle Challenge Project
+#+DESCRIPTION: Master Todo list for building an RL+DL agent with Bayesian Ensemble switching for the Simulation and Strategy Hackathon.
+
+* TODO Phase 1: Environment Setup & Engine Integration
+  - [ ] Set up the local Python environment with =kaggle-environments 1.14.10= [1].
+  - [ ] Configure local training hardware (Desktop with RTX 5080, MacBook Pro M5 Pro) for heavy offline PyTorch training.
+  - [ ] Familiarize with the =cabt= Engine simulator SDK and its minimal setup script requirements [5].
+  - [ ] Implement a basic agent using the =agent.py= and =deck.csv= structure (exactly 60 card IDs) [5, 6].
+
+* TODO Phase 2: Game State Representation & Data Parsing
+  - [ ] Parse the =Observation= object, specifically the =logs= (past actions), =current= (board state), and =select= (available choices) [7, 8].
+  - [ ] Map the =Observation.current= state to feature vectors, tracking both players' =PlayerState= [8].
+  - [ ] Build representations for the =active= Pokémon, up to 5 =bench= Pokémon, =hand= cards, and =prize= cards [9, 10].
+  - [ ] Account for status conditions (=poisoned=, =burned=, =asleep=, =paralyzed=, =confused=) [10].
+
+* TODO Phase 3: Agent Architecture (RL + Ensemble DL)
+  - [ ] Implement a Monte Carlo Tree Search (MCTS) utilizing the engine's built-in Search API (=search_begin=, =search_step=, =search_end=) [11].
+  - [ ] **NEW:** Design an *Ensemble of Specialized Networks* (e.g., General Model, Anti-Aggro Model, Anti-Control Model) to dynamically handle different matchups.
+  - [ ] Design the *Policy Networks* to evaluate =select= options and prioritize MCTS exploration [8].
+  - [ ] Design the *Value Networks* to assess =Observation.current= and truncate MCTS simulations [8].
+
+* TODO Phase 4: Bayesian Inference & Dynamic Model Switching
+  - [ ] **NEW:** Define a *Prior* probability distribution representing the current meta-deck archetypes.
+  - [ ] **NEW:** Write lightweight =numpy= logic [12] to scan the opponent's =active=, =bench=, and =discard= piles [9, 10], as well as event =logs= [8], to gather *Evidence* of their deck type.
+  - [ ] **NEW:** Implement Bayes' Theorem to mathematically update the *Posterior* probability each turn as new opponent cards are revealed.
+  - [ ] **NEW:** Create a trigger threshold: Once the Bayesian algorithm detects a specific opponent archetype with high confidence (e.g., >85%), dynamically hot-swap the MCTS routing to the corresponding specialized ONNX model.
+
+* TODO Phase 5: Heavy Offline Training (PyTorch)
+  - [ ] Utilize the local RTX 5080 to run massive parallel self-play simulations using PyTorch.
+  - [ ] Train the general model against a highly diverse set of decks, and train the specialized models specifically against their target archetypes.
+
+* TODO Phase 6: Resource Optimization & ONNX Conversion
+  - [ ] **NEW:** Export the trained PyTorch models (=.pt=) into the =.onnx= format to strip away training overhead and optimize for CPU inference.
+  - [ ] Ensure the ONNX Runtime executes inference blazingly fast to maximize MCTS rollouts on the competition's strict *2 vCPUs* limit [2].
+  - [ ] Ensure the agent executes within the *12.2 GiB RAM* [2].
+  - [ ] Bundle =main.py=, =deck.csv=, and *all 3-4 lightweight .onnx models* into a single =.tar.gz= file [13].
+  - [ ] **NEW:** Verify the un-nested =.tar.gz= bundle strictly fits under the *197.7 MiB* size limit [1, 2].
+
+* TODO Phase 7: Simulation Track Submissions
+  DEADLINE: <2026-08-09 Sun> Team Merger & Entry Deadline [14]
+  DEADLINE: <2026-08-16 Sun> Final Submission Deadline [14]
+  - [ ] Submit up to 5 agents per day to climb the skill rating ladder [15].
+  - [ ] Monitor the Validation Episodes to ensure the agent does not throw "Error" statuses [16].
+  - [ ] Verify the best agent is one of the 2 most recently submitted, as only the latest 2 are actively tracked [1, 15].
+
+* TODO Phase 8: Strategy Hackathon Track ($240,000 Prize Pool)
+  DEADLINE: <2026-09-06 Sun> Hackathon Team Merger & Entry Deadline [17]
+  DEADLINE: <2026-09-13 Sun> Final Writeup Submission Deadline [17]
+  - [ ] Draft a Kaggle Writeup detailing the model rationale, strategy, and deck concept, ensuring it is *under 2000 words* [18].
+  - [ ] **NEW:** Explicitly highlight the *Bayesian Inference Engine* and *Dynamic ONNX Ensemble* in the Writeup to maximize the "Model Score" (70% of grade), specifically answering how the model "avoids over-reliance on specific initial states, matchups, or situational advantages" [3, 4].
+  - [ ] **NEW:** Detail how the Bayesian logic directly addresses the core challenge of "not knowing what cards an opponent holds" and manages "probability, unknown elements, and strategic planning" [19, 20].
+  - [ ] Compile a *Media Gallery* with images or videos of the agent successfully deducing an opponent's deck and executing a model hot-swap [3].
