@@ -17,3 +17,4 @@ synth_phi
 assets/decks/*.pdf
 
 *.html
+~.lock*
