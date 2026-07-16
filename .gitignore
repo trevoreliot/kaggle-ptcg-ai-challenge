@@ -12,3 +12,6 @@ wheels/
 # Database
 chroma_db
 synth_phi
+
+# Card Assets (large files)
+assets/decks/*.pdf
