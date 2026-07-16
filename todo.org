@@ -2,16 +2,16 @@
 #+DESCRIPTION: Master Todo list for building an RL+DL agent with Bayesian Ensemble switching for the Simulation and Strategy Hackathon.
 
 * TODO Phase 1: Environment Setup & Engine Integration
-  - [ ] Set up the local Python environment with =kaggle-environments 1.14.10= [1].
-  - [ ] Configure local training hardware (Desktop with RTX 5080, MacBook Pro M5 Pro) for heavy offline PyTorch training.
-  - [ ] Familiarize with the =cabt= Engine simulator SDK and its minimal setup script requirements [5].
-  - [ ] Implement a basic agent using the =agent.py= and =deck.csv= structure (exactly 60 card IDs) [5, 6].
+  - [x] Set up the local Python environment with =kaggle-environments 1.14.10= [1]. (Using latest version >=1.32.0 as it successfully runs)
+  - [x] Configure local training hardware (Desktop with RTX 5080, MacBook Pro M5 Pro) for heavy offline PyTorch training.
+  - [x] Familiarize with the =cabt= Engine simulator SDK and its minimal setup script requirements [5].
+  - [x] Implement a basic agent using the =agent.py= and =deck.csv= structure (exactly 60 card IDs) [5, 6].
 
-* TODO Phase 2: Game State Representation & Data Parsing
-  - [ ] Parse the =Observation= object, specifically the =logs= (past actions), =current= (board state), and =select= (available choices) [7, 8].
-  - [ ] Map the =Observation.current= state to feature vectors, tracking both players' =PlayerState= [8].
-  - [ ] Build representations for the =active= Pokémon, up to 5 =bench= Pokémon, =hand= cards, and =prize= cards [9, 10].
-  - [ ] Account for status conditions (=poisoned=, =burned=, =asleep=, =paralyzed=, =confused=) [10].
+* DONE Phase 2: Game State Representation & Data Parsing
+  - [x] Parse the =Observation= object, specifically the =logs= (past actions), =current= (board state), and =select= (available choices) [7, 8].
+  - [x] Map the =Observation.current= state to feature vectors, tracking both players' =PlayerState= [8].
+  - [x] Build representations for the =active= Pokémon, up to 5 =bench= Pokémon, =hand= cards, and =prize= cards [9, 10].
+  - [x] Account for status conditions (=poisoned=, =burned=, =asleep=, =paralyzed=, =confused=) [10].
 
 * TODO Phase 3: Agent Architecture (RL + Ensemble DL)
   - [ ] Implement a Monte Carlo Tree Search (MCTS) utilizing the engine's built-in Search API (=search_begin=, =search_step=, =search_end=) [11].

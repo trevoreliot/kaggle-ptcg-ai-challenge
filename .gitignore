@@ -15,3 +15,5 @@ synth_phi
 
 # Card Assets (large files)
 assets/decks/*.pdf
+
+*.html
