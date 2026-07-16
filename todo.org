@@ -30,21 +30,28 @@
   - [x] Utilize the local RTX 5080 to run massive parallel self-play simulations using PyTorch.
   - [x] Train the general model against a highly diverse set of decks, and train the specialized models specifically against their target archetypes.
 
-* TODO Phase 6: Resource Optimization & ONNX Conversion
-  - [ ] **NEW:** Export the trained PyTorch models (=.pt=) into the =.onnx= format to strip away training overhead and optimize for CPU inference.
-  - [ ] Ensure the ONNX Runtime executes inference blazingly fast to maximize MCTS rollouts on the competition's strict *2 vCPUs* limit [2].
-  - [ ] Ensure the agent executes within the *12.2 GiB RAM* [2].
-  - [ ] Bundle =main.py=, =deck.csv=, and *all 3-4 lightweight .onnx models* into a single =.tar.gz= file [13].
-  - [ ] **NEW:** Verify the un-nested =.tar.gz= bundle strictly fits under the *197.7 MiB* size limit [1, 2].
+* DONE Phase 6: Resource Optimization & ONNX Conversion
+  - [x] **NEW:** Export the trained PyTorch models (=.pt=) into the =.onnx= format to strip away training overhead and optimize for CPU inference.
+  - [x] Ensure the ONNX Runtime executes inference blazingly fast to maximize MCTS rollouts on the competition's strict *2 vCPUs* limit [2].
+  - [x] Ensure the agent executes within the *12.2 GiB RAM* [2].
+  - [x] Bundle =main.py=, =deck.csv=, and *all 3-4 lightweight .onnx models* into a single =.tar.gz= file [13].
+  - [x] **NEW:** Verify the un-nested =.tar.gz= bundle strictly fits under the *197.7 MiB* size limit [1, 2].
 
-* TODO Phase 7: Simulation Track Submissions
+* TODO Phase 7: Production Training & Dev Tools
+  - [ ] **NEW:** Implement parallel environment execution (multiprocessing/VecEnv) to maximize RTX 5080 and Ryzen 9850X3D utilization.
+  - [ ] **NEW:** Develop local dev tools (visualizers, logging, or dashboards) to monitor training progress, appraise performance, and track win rates against specific matchups.
+  - [ ] **NEW:** Create robust, strong opposing archetype decks (Aggro, Control, Combo) to serve as a high-level training gauntlet.
+  - [ ] **NEW:** Tune the Bayesian inference model against these new strong opposing decks to ensure archetype detection is perfectly calibrated.
+  - [ ] **NEW:** Run the multi-day Production Training loop to converge the General and Specialized models.
+
+* TODO Phase 8: Simulation Track Submissions
   DEADLINE: <2026-08-09 Sun> Team Merger & Entry Deadline [14]
   DEADLINE: <2026-08-16 Sun> Final Submission Deadline [14]
   - [ ] Submit up to 5 agents per day to climb the skill rating ladder [15].
   - [ ] Monitor the Validation Episodes to ensure the agent does not throw "Error" statuses [16].
   - [ ] Verify the best agent is one of the 2 most recently submitted, as only the latest 2 are actively tracked [1, 15].
 
-* TODO Phase 8: Strategy Hackathon Track ($240,000 Prize Pool)
+* TODO Phase 9: Strategy Hackathon Track ($240,000 Prize Pool)
   DEADLINE: <2026-09-06 Sun> Hackathon Team Merger & Entry Deadline [17]
   DEADLINE: <2026-09-13 Sun> Final Writeup Submission Deadline [17]
   - [ ] Draft a Kaggle Writeup detailing the model rationale, strategy, and deck concept, ensuring it is *under 2000 words* [18].

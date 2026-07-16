@@ -4,7 +4,7 @@ Welcome to our project repository for the Pokémon TCG AI Challenge.
 
 ## Current Project State
 
-We are currently in the process of training the Agent. Phase 1 through 4 are complete. Our agent utilizes a PyTorch Deep Learning ensemble combined with a lightweight Bayesian Tracker to mathematically infer the opponent's strategy and hot-swap to the appropriate counter-model mid-game.
+We are currently preparing for Phase 7 (Production Training). Phases 1 through 6 are completely finished. Our agent utilizes a PyTorch Deep Learning ensemble combined with a lightweight Bayesian Tracker to mathematically infer the opponent's strategy and hot-swap to the appropriate counter-model mid-game. We have successfully implemented a PyTorch Reinforcement Learning offline training pipeline (A2C) and an ONNX conversion pipeline for Kaggle deployment.
 
 Below is an ASCII diagram representing the current execution pipeline and game state flow:
 
@@ -36,10 +36,20 @@ Below is an ASCII diagram representing the current execution pipeline and game s
 |    - Hot-swaps Ensemble Model if Conf > 85%     |
 |                                                 |
 | 2. Passes Observation to EnsembleManager        |
-|    - Evaluates State via Active PyTorch NN      |
+|    - Evaluates State via ONNX (or PyTorch)      |
 |    - Returns Policy (Action Probabilities)      |
 |                                                 |
-| 3. Agent executes a highly probable legal move  |
+| 3. Trajectory pushing (Training Mode)           |
+|    - Saves state/prob/value to ReplayBuffer     |
+|                                                 |
+| 4. Agent executes a highly probable legal move  |
++------------------------+------------------------+
+                         |
++------------------------v------------------------+
+|             src/core/models/trainer.py          |
+|  (At Game End, pulls from ReplayBuffer)         |
+|  - Calculates recursive discounted rewards      |
+|  - Backpropagates Policy & Value Loss to model  |
 +-------------------------------------------------+
 ```
 
@@ -48,10 +58,16 @@ Below is an ASCII diagram representing the current execution pipeline and game s
   - `agent.py`: The entrypoint for our custom AI logic.
   - `parser.py`: Transforms engine JSON arrays into structured state classes.
   - `bayesian.py` & `bayesian_matrix.py`: Bayesian logic for inferring opponent deck archetypes.
-  - `models/`: PyTorch Deep Learning infrastructure.
-    - `base.py`: The core `BaseNetwork` (Dual-headed Policy/Value).
-    - `ensemble.py`: The `EnsembleManager` that handles loading and hot-swapping different meta models.
-- `tests/`: Contains test suites and scripts for validating modules (e.g. `test_parser.py`, `test_bayesian.py`).
-- `assets/`: Assorted assets including deck CSVs, the Bayesian `likelihood_matrix.npy`, and engine visualizers.
-- `scripts/`: Assorted scripts (e.g., generating dummy decks).
+  - `models/`: Deep Learning infrastructure.
+    - `base.py`: The core `BaseNetwork` architecture (Dual-headed Policy/Value).
+    - `ensemble.py`: The `EnsembleManager` that handles loading and hot-swapping PyTorch `.pt` or `.onnx` models.
+    - `replay_buffer.py`: Temporarily stores trajectory transitions during RL matches.
+    - `trainer.py`: Triggers backpropagation and optimizes model parameters.
+- `tests/`: Contains test suites and scripts for validating modules.
+- `assets/`: Assorted assets including deck CSVs, `likelihood_matrix.npy`, and `models/` directory for `.onnx` files.
+- `scripts/`: Development scripts.
+  - `export_onnx.py`: Compiles PyTorch weights into optimized CPU `.onnx` formats.
+  - `bundle_submission.py`: Compresses necessary code and models into a `<197.7 MiB` `.tar.gz`.
+  - `generate_dummy_decks.py`: Quickly spawns test CSVs.
+- `submissions/`: Output directory where `.tar.gz` packages are saved for upload to Kaggle.
 - `main.py`: Our top-level script for initiating local simulations and tests.
