@@ -73,13 +73,18 @@ def agent(obs_dict: dict) -> list[int]:
     
     # Push to Replay Buffer if training
     if global_replay_buffer is not None:
-        import torch
-        # Re-encode the state to save in buffer (detached)
-        state_tensor = ensemble.encoder.encode(parsed_obs).unsqueeze(0).detach()
-        # Placeholder for old log_prob (not strictly needed if Trainer recalculates, but good for PPO)
-        # We push a dummy log_prob since our A2C recalculates it.
-        dummy_log_prob = torch.tensor([0.0])
-        global_replay_buffer.push(state_tensor, action, dummy_log_prob, value)
+        try:
+            import torch
+            # Re-encode the state to save in buffer (detached)
+            state_tensor = ensemble.encoder.encode(parsed_obs).unsqueeze(0).detach()
+            # Placeholder for old log_prob (not strictly needed if Trainer recalculates, but good for PPO)
+            # We push a dummy log_prob since our A2C recalculates it.
+            dummy_log_prob = torch.tensor([0.0])
+            global_replay_buffer.push(state_tensor, action, dummy_log_prob, value)
+        except Exception as e:
+            import traceback
+            print("Error during replay buffer push:")
+            traceback.print_exc()
         
     # Return selected action(s) up to maxCount. For simplicity, we just return the single chosen action.
     # If max_count > 1, the engine wants multiple cards. We just append randoms for the rest.

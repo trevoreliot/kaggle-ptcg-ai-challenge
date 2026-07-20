@@ -77,6 +77,8 @@ def _parse_card(data: dict) -> Card:
     )
 
 def _parse_pokemon(data: dict) -> Pokemon:
+    if data is None:
+        return None
     return Pokemon(
         id=data.get("id", 0),
         serial=data.get("serial", 0),

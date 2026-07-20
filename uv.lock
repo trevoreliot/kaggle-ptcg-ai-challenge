@@ -2212,6 +2212,7 @@ dependencies = [
     { name = "kaggle-environments" },
     { name = "numpy" },
     { name = "torch" },
+    { name = "tqdm" },
 ]
 
 [package.metadata]
@@ -2220,6 +2221,7 @@ requires-dist = [
     { name = "kaggle-environments", specifier = ">=1.32.0" },
     { name = "numpy", specifier = ">=2.5.1" },
     { name = "torch", specifier = ">=2.13.0" },
+    { name = "tqdm", specifier = ">=4.68.4" },
 ]
 
 [[package]]
