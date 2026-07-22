@@ -37,6 +37,9 @@ def get_available_decks(opp_deck_arg: str) -> list[str]:
     elif os.path.isdir(opp_deck_arg):
         decks = glob(os.path.join(opp_deck_arg, "*.csv"))
         return [d for d in decks if "_appendix" not in d and "EN_Card_Data" not in d]
+    elif os.path.isdir(os.path.join("assets", "decks", opp_deck_arg)):
+        decks = glob(os.path.join("assets", "decks", opp_deck_arg, "*.csv"))
+        return [d for d in decks if "_appendix" not in d and "EN_Card_Data" not in d]
     else:
         return [opp_deck_arg]
 
@@ -49,17 +52,28 @@ def worker_run_episode(p1_deck_path, p2_deck_path):
     import src.core.agent as agent_module
     from src.core.models.replay_buffer import ReplayBuffer
     
+    import sys
+    
     p1_deck = load_deck(p1_deck_path)
     p2_deck = load_deck(p2_deck_path)
     
-    env = make("cabt", configuration={"decks": [p1_deck, p2_deck]})
-    agent_module._local_env_ref = env
-    
-    local_buffer = ReplayBuffer(gamma=0.99)
-    agent_module.global_replay_buffer = local_buffer
-    
-    env.reset()
-    env.run([agent_module.agent, agent_module.agent])
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    with open(os.devnull, "w") as devnull:
+        sys.stdout = devnull
+        sys.stderr = devnull
+        try:
+            env = make("cabt", configuration={"decks": [p1_deck, p2_deck]})
+            agent_module._local_env_ref = env
+            
+            local_buffer = ReplayBuffer(gamma=0.99)
+            agent_module.global_replay_buffer = local_buffer
+            
+            env.reset()
+            env.run([agent_module.agent, agent_module.agent])
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
     
     if env.state[0].status == "ERROR":
         pass
@@ -84,6 +98,8 @@ def main():
                         help="Number of matches to simulate (only used in 'train' mode).")
     parser.add_argument("--workers", type=int, default=1,
                         help="Number of parallel worker processes for training.")
+    parser.add_argument("--model-name", type=str, default="general_model.pt",
+                        help="Name of the model file to save/load (e.g. aggro_model.pt).")
     args = parser.parse_args()
 
     # Play mode (synchronous, 1 match)
@@ -124,10 +140,12 @@ def main():
         from src.core.models.trainer import Trainer
         import src.core.agent as agent_module
         
+        import torch
+        
         master_buffer = ReplayBuffer(gamma=0.99)
         trainer = Trainer(ensemble=agent_module.ensemble, lr=1e-4)
         
-        checkpoint_path = "assets/models/general_model.pt"
+        checkpoint_path = os.path.join("assets", "models", args.model_name)
         os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
         if os.path.exists(checkpoint_path):
             agent_module.ensemble.active_model.load_state_dict(torch.load(checkpoint_path, weights_only=True))
@@ -164,6 +182,7 @@ def main():
                             policy_loss, value_loss = 0.0, 0.0
                             if completed % 5 == 0 or completed == args.episodes:
                                 policy_loss, value_loss = trainer.update(master_buffer)
+                                master_buffer.clear()
                                 pbar.set_postfix({"P_Loss": f"{policy_loss:.3f}", "V_Loss": f"{value_loss:.3f}"})
                                 
                             if completed % 100 == 0 or completed == args.episodes:
@@ -183,6 +202,7 @@ def main():
                         policy_loss, value_loss = 0.0, 0.0
                         if completed % 5 == 0 or completed == args.episodes:
                             policy_loss, value_loss = trainer.update(master_buffer)
+                            master_buffer.clear()
                             pbar.set_postfix({"P_Loss": f"{policy_loss:.3f}", "V_Loss": f"{value_loss:.3f}"})
                             
                         if completed % 100 == 0 or completed == args.episodes:

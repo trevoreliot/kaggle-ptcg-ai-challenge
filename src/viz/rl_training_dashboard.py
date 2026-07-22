@@ -10,7 +10,7 @@ st.title("🏆 Pokémon TCG AI Training Dashboard")
 # Function to load data
 @st.cache_data(ttl=5) # Cache data for 5 seconds to prevent spam when refreshing
 def load_data():
-    csv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "training_metrics.csv")
+    csv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "training_metrics.csv")
     if not os.path.exists(csv_path):
         return pd.DataFrame(columns=["Episode", "Opponent_Deck", "Reward", "Episode_Length", "Policy_Loss", "Value_Loss"])
     

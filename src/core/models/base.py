@@ -24,7 +24,7 @@ class BaseNetwork(nn.Module):
     1. Value: Scalar from -1 to 1 representing win probability.
     2. Policy: Vector representing action prior probabilities.
     """
-    def __init__(self, input_size: int = 128, hidden_size: int = 256, policy_size: int = 64):
+    def __init__(self, input_size: int = 128, hidden_size: int = 256, policy_size: int = 512):
         super(BaseNetwork, self).__init__()
         
         self.shared_mlp = nn.Sequential(
@@ -42,8 +42,8 @@ class BaseNetwork(nn.Module):
         )
         
         self.policy_head = nn.Sequential(
-            nn.Linear(hidden_size, policy_size),
-            nn.Softmax(dim=-1) # Output a probability distribution
+            nn.Linear(hidden_size, policy_size)
+            # Output raw logits so trainer can apply log_softmax without double-softmaxing
         )
         
     def forward(self, state_tensor: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:

@@ -58,18 +58,25 @@ def agent(obs_dict: dict) -> list[int]:
             print(f"[Bayesian] High confidence (>85%) detected for archetype: {best_archetype}. Attempting hot-swap.")
             ensemble.switch_model(best_archetype)
             
-    # Evaluate the current state using the Policy Network
-    value, policy = ensemble.evaluate(parsed_obs)
+    import numpy as np
     
-    # Policy outputs probabilities for ALL options.
+    # Evaluate the current state using the Policy Network (returns logits now)
+    value, policy_logits = ensemble.evaluate(parsed_obs)
+    
+    # Policy outputs logits for ALL options (up to 512).
     options = parsed_obs.select.option
     max_count = min(parsed_obs.select.maxCount, len(options))
     
-    # For A2C, we select an action based on probability distribution during training
-    # but for deterministic/greedy we can use max probability.
-    # We will simply randomly sample based on the legal options to keep this basic implementation clean.
-    # In a full run, we would sample directly from `policy`.
-    action = random.choice(list(range(len(options))))
+    # Slice only the valid options
+    valid_logits = np.array(policy_logits[:len(options)])
+    
+    # Apply softmax to convert logits to probabilities
+    # Subtract max for numerical stability
+    exp_logits = np.exp(valid_logits - np.max(valid_logits))
+    valid_probs = exp_logits / exp_logits.sum()
+    
+    # Sample probabilistically
+    action = np.random.choice(len(options), p=valid_probs)
     
     # Push to Replay Buffer if training
     if global_replay_buffer is not None:

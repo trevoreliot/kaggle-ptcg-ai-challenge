@@ -9,47 +9,54 @@ We are currently preparing for Phase 7 (Production Training). Phases 1 through 6
 Below is an ASCII diagram representing the current execution pipeline and game state flow:
 
 ```text
++-------------------------------------------------------------+
+|                          main.py                            |
+|       (Orchestrates Multi-Processing Training Loop)         |
++----------------------------+--------------------------------+
+                             |
+         +-------------------v-------------------+
+         | multiprocessing.Pool.imap_unordered() |
+         |   (Spawns parallel environments)      |
+         +---+---------------+---------------+---+
+             |               |               |
+       +-----v-----+   +-----v-----+   +-----v-----+
+       | Worker 1  |   | Worker 2  |   | Worker N  |
+       | env.run() |   | env.run() |   | env.run() |
+       +-----+-----+   +-----+-----+   +-----+-----+
+             |               |               |
+         +---v---------------+---------------v---+
+         |      master_buffer.add_trajectory()   |
+         |  (Yields completed games real-time)   |
+         +-------------------+-------------------+
+                             |
++----------------------------v--------------------------------+
+|                   src/core/models/trainer.py                |
+|  - Samples batches from master_buffer                       |
+|  - Backpropagates Policy & Value Loss to ensemble model     |
+|  - main.py periodically saves general_model.pt              |
++-------------------------------------------------------------+
+
+Inside each Worker (env.run):
 +-------------------------------------------------+
-|                    main.py                      |
-| (Instantiates cabt env and loads deck.csv)      |
-+------------------------+------------------------+
-                         |
-                +--------v---------+
-                | env.run([agents])|
-                +--------+---------+
-                         |
-+------------------------+------------------------+
 |                 src/core/agent.py               |
 |  (Agent receives raw JSON obs_dict each turn)   |
 +------------------------+------------------------+
                          |
-+------------------------+------------------------+
-|                src/core/parser.py               |
++------------------------v------------------------+
+|                 src/core/parser.py              |
 | (Maps obs_dict into typed Python Dataclasses)   |
 +------------------------+------------------------+
                          |
 +------------------------v------------------------+
-|                 src/core/agent.py               |
-|                                                 |
 | 1. Passes Observation to BayesianTracker        |
-|    - Infers opponent archetype                  |
+|    - Infers archetype via assets/prob/matrix    |
 |    - Hot-swaps Ensemble Model if Conf > 85%     |
 |                                                 |
 | 2. Passes Observation to EnsembleManager        |
-|    - Evaluates State via ONNX (or PyTorch)      |
+|    - Evaluates State via Model                  |
 |    - Returns Policy (Action Probabilities)      |
 |                                                 |
-| 3. Trajectory pushing (Training Mode)           |
-|    - Saves state/prob/value to ReplayBuffer     |
-|                                                 |
-| 4. Agent executes a highly probable legal move  |
-+------------------------+------------------------+
-                         |
-+------------------------v------------------------+
-|             src/core/models/trainer.py          |
-|  (At Game End, pulls from ReplayBuffer)         |
-|  - Calculates recursive discounted rewards      |
-|  - Backpropagates Policy & Value Loss to model  |
+| 3. Agent executes highly probable legal move    |
 +-------------------------------------------------+
 ```
 
@@ -64,10 +71,31 @@ Below is an ASCII diagram representing the current execution pipeline and game s
     - `replay_buffer.py`: Temporarily stores trajectory transitions during RL matches.
     - `trainer.py`: Triggers backpropagation and optimizes model parameters.
 - `tests/`: Contains test suites and scripts for validating modules.
-- `assets/`: Assorted assets including deck CSVs, `likelihood_matrix.npy`, and `models/` directory for `.onnx` files.
+- `assets/`: Assorted assets including deck CSVs.
+  - `prob/`: Contains the generated `likelihood_matrix.npy`.
+  - `models/`: Checkpoints and `.onnx` models.
 - `scripts/`: Development scripts.
+  - `build_likelihood_matrix.py`: Retrains the Bayesian probability matrix.
   - `export_onnx.py`: Compiles PyTorch weights into optimized CPU `.onnx` formats.
   - `bundle_submission.py`: Compresses necessary code and models into a `<197.7 MiB` `.tar.gz`.
-  - `generate_dummy_decks.py`: Quickly spawns test CSVs.
+- `viz/`: Visualization and Dev Tools.
+  - `dashboard.py`: Live Streamlit tracking of training metrics.
 - `submissions/`: Output directory where `.tar.gz` packages are saved for upload to Kaggle.
 - `main.py`: Our top-level script for initiating local simulations and tests.
+
+## Usage Commands
+
+**1. Generate Bayesian Probabilities:**
+```bash
+uv run python scripts/build_likelihood_matrix.py
+```
+
+**2. Run Headless Parallel Training (RTX 5080):**
+```bash
+uv run python main.py --mode train --opp-deck all --workers 16 --episodes 100000
+```
+
+**3. Launch Live Training Dashboard:**
+```bash
+uv run streamlit run viz/dashboard.py
+```
