@@ -8,6 +8,9 @@ dependencies = [
     "kaggle>=2.2.3",
     "kaggle-environments>=1.32.0",
     "numpy>=2.5.1",
+    "pandas>=3.0.3",
+    "plotly>=6.9.0",
+    "streamlit>=1.60.0",
     "torch>=2.13.0",
     "tqdm>=4.68.4",
 ]

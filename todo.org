@@ -34,13 +34,13 @@
   - [x] **NEW:** Export the trained PyTorch models (=.pt=) into the =.onnx= format to strip away training overhead and optimize for CPU inference.
   - [x] Ensure the ONNX Runtime executes inference blazingly fast to maximize MCTS rollouts on the competition's strict *2 vCPUs* limit [2].
   - [x] Ensure the agent executes within the *12.2 GiB RAM* [2].
-  - [x] Bundle =main.py=, =deck.csv=, and *all 3-4 lightweight .onnx models* into a single =.tar.gz= file [13].
+  - [ ] Bundle =main.py=, =deck.csv=, and *all 3-4 lightweight .onnx models* into a single =.tar.gz= file [13].
   - [x] **NEW:** Verify the un-nested =.tar.gz= bundle strictly fits under the *197.7 MiB* size limit [1, 2].
 
 * TODO Phase 7: Production Training & Dev Tools
-  - [ ] **NEW:** Implement parallel environment execution (multiprocessing/VecEnv) to maximize RTX 5080 and Ryzen 9850X3D utilization.
+  - [X] **NEW:** Implement parallel environment execution (multiprocessing/VecEnv) to maximize RTX 5080 and Ryzen 9850X3D utilization.
   - [ ] **NEW:** Develop local dev tools (visualizers, logging, or dashboards) to monitor training progress, appraise performance, and track win rates against specific matchups.
-  - [ ] **NEW:** Create robust, strong opposing archetype decks (Aggro, Control, Combo) to serve as a high-level training gauntlet.
+  - [X] **NEW:** Create robust, strong opposing archetype decks (Aggro, Control, Combo) to serve as a high-level training gauntlet.
   - [ ] **NEW:** Tune the Bayesian inference model against these new strong opposing decks to ensure archetype detection is perfectly calibrated.
   - [ ] **NEW:** Run the multi-day Production Training loop to converge the General and Specialized models.
 

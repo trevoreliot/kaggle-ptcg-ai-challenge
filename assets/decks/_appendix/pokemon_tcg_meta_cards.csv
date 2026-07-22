@@ -1,0 +1,82 @@
+Card Name,Category,Format Era,Signal Weight,Notes
+Charizard ex (Darkness),Aggressive,2023-2026,0.9,"Heavy damage scaling, self-accelerating energy"
+Raging Bolt ex,Aggressive,2024-2026,0.95,"Fast high damage, early prize pressure"
+Dragapult ex,Aggressive,2024-2026,0.85,"Spread damage, rapid setup"
+Iron Hands ex,Aggressive,2023-2025,0.9,Amp You Very Much generates extra prizes
+Roaring Moon ex,Aggressive,2023-2025,0.9,Instant KO capability (Frenzied Gouging)
+Chien-Pao ex,Aggressive,2023-2025,0.85,Infinite damage scaling with water energy
+Gouging Fire ex,Aggressive,2024-2026,0.8,High base damage early game
+Miraidon ex,Aggressive,2023-2025,0.8,T1 setup and fast blitzing
+Cinccino (Special Energy),Aggressive,2024-2026,0.75,High single-prize damage multiplier
+Professor Sada's Vitality,Aggressive,2023-2025,0.85,Ancient energy acceleration + draw
+Prime Catcher,Aggressive,2024-2026,0.75,"Aggressive gusting, forces opponent active"
+Boss's Orders,Aggressive,Staple,0.6,Target priority threats (Also used in Control)
+Teal Mask Ogerpon ex,Aggressive,2024-2026,0.75,Grass energy acceleration
+Rare Candy,Aggressive,Staple,0.65,Usually points to fast Stage 2 Aggro
+Snorlax (Block),Combo/Control,2023-2025,0.95,"Traps opponent's active, pure stall/control"
+Dusclops,Combo/Control,2024-2026,0.85,Self-KO for targeted damage counter placement combo
+Dusknoir,Combo/Control,2024-2026,0.85,Self-KO for heavy targeted damage counters
+Froslass,Combo/Control,2024-2025,0.8,Passive spread damage between turns
+Klefki,Combo/Control,2023-2025,0.8,Basic ability lock
+Mimikyu,Combo/Control,2023-2025,0.85,Immune to ex/V damage
+Crushing Hammer,Combo/Control,Staple,0.9,Energy denial
+Eri,Combo/Control,2024-2026,0.9,Item discard from opponent's hand
+Xerosic's Machinations,Combo/Control,2024-2026,0.85,Severe hand size reduction
+Jamming Tower,Combo/Control,2024-2025,0.75,Tool lock
+Iono,Combo/Control,2023-2026,0.65,Hand disruption (also heavy engine usage)
+Counter Catcher,Combo/Control,2023-2026,0.8,Comeback gusting without playing a Supporter
+Enhanced Hammer,Combo/Control,2024-2026,0.85,Special energy denial
+Unfair Stamp,Combo/Control,2024-2026,0.75,Retaliatory hand disruption
+Radiant Greninja,Engine,2022-2026,0.3,"Draw 2, discard energy (Found in almost all decks)"
+Fezandipiti ex,Engine,2024-2026,0.3,Draw 3 on KO (Universal inclusion)
+Squawkabilly ex,Engine,2023-2025,0.4,Turn 1 discard and draw 6
+Lumineon V,Engine,2022-2025,0.3,Search any supporter on bench
+Rotom V,Engine,2022-2025,0.5,Turn-ending draw 3 (Leans Control/Slow Aggro)
+Fan Rotom,Engine,2025-2026,0.4,Turn 1 setup
+Pidgeot ex,Engine,2023-2026,0.6,Search any 1 card per turn (Usually pairs with Charizard or Control)
+Bibarel,Engine,2022-2025,0.4,Passive draw until 5 cards in hand
+Buddy-Buddy Poffin,Engine,2024-2026,0.2,Search 2 basic low-HP (Highly universal)
+Nest Ball,Engine,Staple,0.1,Search basic (Universal)
+Ultra Ball,Engine,Staple,0.2,"Search any pokemon, costs 2 cards (Universal)"
+Earthen Vessel,Engine,2023-2026,0.3,"Search basic energy, fills discard pile"
+Professor's Research,Engine,Staple,0.2,"Discard hand, draw 7 (Universal)"
+Ciphermaniac's Codebreaking,Engine,2024-2026,0.5,Top deck manipulation
+Night Stretcher,Engine,2024-2026,0.3,Item-based recovery
+Super Rod,Engine,Staple,0.2,Recovery
+Bloodmoon Ursaluna ex,Versatile/Toolbox,2024-2026,0.7,"Late game free attack, generic tech"
+Wellspring Mask Ogerpon ex,Versatile/Toolbox,2024-2025,0.8,Bench sniping capability
+Cornerstone Mask Ogerpon ex,Versatile/Toolbox,2024-2025,0.8,Immunity to abilities (shreds Charizard/Chien-Pao)
+Mew ex,Versatile/Toolbox,2023-2025,0.75,"Copy opponent's attack, free retreat pivot"
+Radiant Charizard,Versatile/Toolbox,2022-2025,0.65,Late game single prize nuke
+Radiant Alakazam,Versatile/Toolbox,2022-2025,0.7,Damage manipulation on board
+Luminous Energy,Versatile/Toolbox,2023-2026,0.85,"Rainbow energy, indicates multiple attacker types"
+Legacy Energy,Versatile/Toolbox,2024-2026,0.8,Rainbow energy + prize denial
+Iron Crown ex,Versatile/Toolbox,2024-2025,0.8,Damage modifier for Future Pokemon
+Iron Leaves ex,Versatile/Toolbox,2024-2025,0.8,Grass weakness counter tech (Counters Charizard)
+Energy Switch,Versatile/Toolbox,Staple,0.6,Surprise attack pivots
+Arceus VSTAR,Aggressive,2022-2024,0.85,Trinity Nova accelerates basic energy to Pokemon V
+Mew VMAX,Aggressive,2021-2024,0.95,Hyper aggressive combo deck utilizing Genesect V
+Rapid Strike Urshifu VMAX,Aggressive,2021-2023,0.85,Spread bench damage (G-Max Rapid Flow)
+Single Strike Urshifu VMAX,Aggressive,2021-2023,0.9,One-hit KO massive damage scaling
+Arceus & Dialga & Palkia-GX (ADP),Aggressive,2019-2021,0.95,Altered Creation GX permanently increases damage and prizes taken
+Zacian V,Aggressive,2020-2022,0.8,Intrepid Sword engine and high base damage
+Eternatus VMAX,Aggressive,2020-2022,0.9,"Requires full bench of Dark types, aggressive scaling"
+Pikachu & Zekrom-GX,Aggressive,2019-2021,0.9,Fast energy acceleration and multi-prize taking
+Path to the Peak,Combo/Control,2021-2024,0.75,"Shuts off Rule Box abilities, slows the game down"
+Marnie,Combo/Control,2020-2023,0.7,"Hand disruption (bottom of deck), similar to Iono"
+Reset Stamp,Combo/Control,2019-2021,0.85,Late game severe hand disruption based on prizes
+Galar Mine,Combo/Control,2020-2023,0.8,"Increases retreat cost, used with trapping abilities"
+Lucario & Melmetal-GX,Combo/Control,2019-2021,0.85,Full Metal Wall GX permanently reduces damage taken
+Oranguru (Primate Wisdom),Combo/Control,2020-2022,0.6,Deck stacking to avoid disruption or combo with Rotom Phone
+Drizzile (Shady Dealings),Engine,2020-2023,0.3,Search any trainer on evolution
+Inteleon (Shady Dealings),Engine,2020-2023,0.35,Search up to 2 trainers on evolution
+Crobat V,Engine,2020-2023,0.3,Draw until you have 6 cards when benched
+Dedenne-GX,Engine,2019-2021,0.3,Discard hand and draw 6 when benched
+Jirachi (Stellar Wish),Engine,2019-2021,0.35,Top deck trainer search while in active spot
+Scoop Up Net,Engine,2020-2023,0.4,Re-uses abilities on non-V/GX pokemon (Inteleon line)
+Evolution Incense,Engine,2020-2023,0.2,Search evolution pokemon (Staple in its era)
+Quick Ball,Engine,2020-2023,0.15,"Discard 1, search basic pokemon (Universal in its era)"
+Drapion V,Versatile/Toolbox,2022-2024,0.9,Specific counter to Mew VMAX and Strike pokemon
+Galarian Zapdos V,Versatile/Toolbox,2021-2023,0.8,"Fighting counter, cost reduced based on opposing Pokemon V"
+Amazing Rare Jirachi,Versatile/Toolbox,2020-2022,0.75,"Multi-energy attacker, requires diverse energy acceleration"
+Mewtwo & Mew-GX,Versatile/Toolbox,2019-2021,0.85,Copies attacks of any GX or EX in discard pile

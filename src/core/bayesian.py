@@ -12,7 +12,7 @@ class BayesianTracker:
         self.prior = np.ones(self.num_archetypes) / self.num_archetypes
         
         # Load the Likelihood Matrix
-        matrix_path = os.path.join("assets", "likelihood_matrix.npy")
+        matrix_path = os.path.join("assets", "prob", "likelihood_matrix.npy")
         if os.path.exists(matrix_path):
             self.likelihood_matrix = np.load(matrix_path)
         else:

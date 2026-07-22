@@ -32,9 +32,11 @@ def load_deck(filepath: str) -> list[int]:
 def get_available_decks(opp_deck_arg: str) -> list[str]:
     """Parse the opp-deck argument into a list of actual CSV paths."""
     if opp_deck_arg.lower() == "all":
-        return glob("assets/decks/**/*.csv", recursive=True)
+        decks = glob("assets/decks/**/*.csv", recursive=True)
+        return [d for d in decks if "_appendix" not in d and "EN_Card_Data" not in d]
     elif os.path.isdir(opp_deck_arg):
-        return glob(os.path.join(opp_deck_arg, "*.csv"))
+        decks = glob(os.path.join(opp_deck_arg, "*.csv"))
+        return [d for d in decks if "_appendix" not in d and "EN_Card_Data" not in d]
     else:
         return [opp_deck_arg]
 
@@ -125,6 +127,14 @@ def main():
         master_buffer = ReplayBuffer(gamma=0.99)
         trainer = Trainer(ensemble=agent_module.ensemble, lr=1e-4)
         
+        checkpoint_path = "assets/models/general_model.pt"
+        os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+        if os.path.exists(checkpoint_path):
+            agent_module.ensemble.active_model.load_state_dict(torch.load(checkpoint_path, weights_only=True))
+            print(f"Loaded existing PyTorch checkpoint from {checkpoint_path}!")
+        else:
+            print(f"No checkpoint found at {checkpoint_path}. Starting training from scratch!")
+        
         log_file = "training_metrics.csv"
         file_exists = os.path.isfile(log_file)
         
@@ -156,6 +166,10 @@ def main():
                                 policy_loss, value_loss = trainer.update(master_buffer)
                                 pbar.set_postfix({"P_Loss": f"{policy_loss:.3f}", "V_Loss": f"{value_loss:.3f}"})
                                 
+                            if completed % 100 == 0 or completed == args.episodes:
+                                import torch
+                                torch.save(agent_module.ensemble.active_model.state_dict(), checkpoint_path)
+                                
                             writer.writerow([completed, os.path.basename(p2_path), reward, ep_len, policy_loss, value_loss])
                             csvfile.flush()
                             pbar.update(1)
@@ -170,6 +184,10 @@ def main():
                         if completed % 5 == 0 or completed == args.episodes:
                             policy_loss, value_loss = trainer.update(master_buffer)
                             pbar.set_postfix({"P_Loss": f"{policy_loss:.3f}", "V_Loss": f"{value_loss:.3f}"})
+                            
+                        if completed % 100 == 0 or completed == args.episodes:
+                            import torch
+                            torch.save(agent_module.ensemble.active_model.state_dict(), checkpoint_path)
                             
                         writer.writerow([completed, os.path.basename(p2_path), reward, ep_len, policy_loss, value_loss])
                         csvfile.flush()
