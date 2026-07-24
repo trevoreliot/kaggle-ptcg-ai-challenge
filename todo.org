@@ -39,16 +39,17 @@
 
 * TODO Phase 7: Production Training & Dev Tools
   - [X] **NEW:** Implement parallel environment execution (multiprocessing/VecEnv) to maximize RTX 5080 and Ryzen 9850X3D utilization.
-  - [ ] **NEW:** Develop local dev tools (visualizers, logging, or dashboards) to monitor training progress, appraise performance, and track win rates against specific matchups.
-    - [ ] add training results location and make rl trainig dashboard allow us to select which csv to analyze
+  - [X] **NEW:** Develop local dev tools (visualizers, logging, or dashboards) to monitor training progress, appraise performance, and track win rates against specific matchups.
+    - [X] add training results location and make rl trainig dashboard allow us to select which csv to analyze
   - [X] **NEW:** Create robust, strong opposing archetype decks (Aggro, Control, Combo) to serve as a high-level training gauntlet.
   - [ ] **NEW:** Tune the Bayesian inference model against these new strong opposing decks to ensure archetype detection is perfectly calibrated.
-  - [ ] **NEW:** Run the multi-day Production Training loop to converge the General and Specialized models.
+  - [X] **NEW** Vendor the cg-lib and improve our training environment such that our agent isnt guessing what to do so much. https://www.kaggle.com/datasets/kiyotah/cg-lib/data?select=cg
+  - [X] **NEW:** Run the multi-day Production Training loop to converge the General and Specialized models.
 
 * TODO Phase 8: Simulation Track Submissions
   DEADLINE: <2026-08-09 Sun> Team Merger & Entry Deadline [14]
   DEADLINE: <2026-08-16 Sun> Final Submission Deadline [14]
-  - [ ] FIXME: make tar.gz conform with submission rules
+  - [X] FIXME: make tar.gz conform with submission rules
   - [ ] Submit up to 5 agents per day to climb the skill rating ladder [15].
   - [ ] Monitor the Validation Episodes to ensure the agent does not throw "Error" statuses [16].
   - [ ] Verify the best agent is one of the 2 most recently submitted, as only the latest 2 are actively tracked [1, 15].

@@ -19,66 +19,34 @@ def build_matrix():
     # Archetype order: ["aggro", "control", "combo", "versatile"]
     matrix = np.full((2000, 4), 0.25)
     
-    # 2. Parse pokemon_tcg_meta_cards.csv
-    meta_path = "assets/decks/_appendix/pokemon_tcg_meta_cards.csv"
+    # 2. Parse deck folders directly to guarantee exact ID matches
+    archetype_dirs = {
+        "aggro": 0,
+        "control": 1,
+        "combo": 2,
+        "versatile": 3
+    }
     
+    import glob
     matched_cards = 0
-    with open(meta_path, "r", encoding="utf-8") as f:
-        reader = csv.reader(f)
-        next(reader)
-        for row in reader:
-            if not row or len(row) < 4: continue
+    for arch, arch_idx in archetype_dirs.items():
+        arch_dir = os.path.join("assets", "decks", arch)
+        if not os.path.exists(arch_dir):
+            continue
             
-            raw_name = row[0].strip().lower()
-            category = row[1].strip()
-            
-            try:
-                weight = float(row[3])
-            except ValueError:
-                weight = 0.5
-                
-            # Match cardId (Handle parentheses like "Snorlax (Block)")
-            base_name = raw_name.split("(")[0].strip()
-            
-            found_id = None
-            if raw_name in card_name_to_id:
-                found_id = card_name_to_id[raw_name]
-            elif base_name in card_name_to_id:
-                found_id = card_name_to_id[base_name]
-            else:
-                # Partial match fallback
-                for db_name, db_id in card_name_to_id.items():
-                    if base_name in db_name or db_name in base_name:
-                        found_id = db_id
-                        break
-                        
-            if found_id is not None:
-                matched_cards += 1
-                # Route weight to archetypes: ["aggro", "control", "combo", "versatile"]
-                dist = np.zeros(4)
-                
-                if "Aggressive" in category:
-                    dist[0] = weight
-                    remaining = (1.0 - weight) / 3
-                    dist[1:] = remaining
-                elif "Combo/Control" in category:
-                    # Boost both control and combo equally
-                    dist[1] = weight / 2
-                    dist[2] = weight / 2
-                    remaining = (1.0 - weight) / 2
-                    dist[0] = remaining / 2
-                    dist[3] = remaining / 2
-                elif "Versatile/Toolbox" in category:
-                    dist[3] = weight
-                    remaining = (1.0 - weight) / 3
-                    dist[:3] = remaining
-                elif "Engine" in category:
-                    # Universal, flat boost
-                    dist = np.full(4, 0.25)
-                else:
-                    dist = np.full(4, 0.25)
-                    
-                matrix[found_id] = dist
+        for csv_file in glob.glob(os.path.join(arch_dir, "*.csv")):
+            with open(csv_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line: continue
+                    try:
+                        card_id = int(line.split(',')[0])
+                        if card_id < 2000:
+                            # Boost this card's likelihood for this archetype
+                            matrix[card_id][arch_idx] += 2.0
+                            matched_cards += 1
+                    except ValueError:
+                        pass
     
     print(f"Matched {matched_cards} meta cards to the database.")
     

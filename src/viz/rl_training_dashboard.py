@@ -9,8 +9,7 @@ st.title("🏆 Pokémon TCG AI Training Dashboard")
 
 # Function to load data
 @st.cache_data(ttl=5) # Cache data for 5 seconds to prevent spam when refreshing
-def load_data():
-    csv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "training_metrics.csv")
+def load_data(csv_path):
     if not os.path.exists(csv_path):
         return pd.DataFrame(columns=["Episode", "Opponent_Deck", "Reward", "Episode_Length", "Policy_Loss", "Value_Loss"])
     
@@ -18,16 +17,30 @@ def load_data():
     df = pd.read_csv(csv_path)
     return df
 
-df = load_data()
+results_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "results", "rl_training")
+
+if not os.path.exists(results_dir):
+    st.warning("Results directory not found! Run the training loop first.")
+    st.stop()
+
+csv_files = [f for f in os.listdir(results_dir) if f.endswith('.csv')]
+if not csv_files:
+    st.warning("No CSV files found in the results directory! Run the training loop to generate metrics.")
+    st.stop()
+
+selected_csv = st.selectbox("Select Training Metrics CSV", csv_files)
+csv_path = os.path.join(results_dir, selected_csv)
+
+df = load_data(csv_path)
 
 if df.empty:
-    st.warning("No training data found yet! Run the training loop to generate 'training_metrics.csv'.")
+    st.warning(f"No training data found in {selected_csv}!")
     st.stop()
 
 # ---- KPIs ----
 col1, col2, col3, col4 = st.columns(4)
 total_episodes = len(df)
-global_winrate = df["Reward"].mean() * 100
+global_winrate = (df["Reward"] == 1).mean() * 100
 avg_len = df["Episode_Length"].mean()
 latest_policy_loss = df["Policy_Loss"].iloc[-1] if not df.empty else 0
 latest_value_loss = df["Value_Loss"].iloc[-1] if not df.empty else 0
@@ -47,7 +60,7 @@ with row1_col1:
     # Group by deck
     matchups = df.groupby("Opponent_Deck").agg(
         Matches=("Reward", "count"),
-        Win_Rate=("Reward", lambda x: x.mean() * 100)
+        Win_Rate=("Reward", lambda x: (x == 1).mean() * 100)
     ).reset_index()
     matchups = matchups.sort_values("Win_Rate", ascending=False)
     
@@ -61,13 +74,13 @@ with row1_col1:
         text_auto=".1f"
     )
     fig_bar.update_layout(yaxis_range=[0, 100])
-    st.plotly_chart(fig_bar, use_container_width=True)
+    st.plotly_chart(fig_bar, width='stretch')
 
 with row1_col2:
     st.subheader("📈 Win Rate Trend")
     # Rolling average of reward
     rolling_window = min(1000, max(1, len(df) // 10))
-    df["Rolling_Win_Rate"] = df["Reward"].rolling(window=rolling_window, min_periods=1).mean() * 100
+    df["Rolling_Win_Rate"] = (df["Reward"] == 1).rolling(window=rolling_window, min_periods=1).mean() * 100
     
     fig_trend = px.line(
         df, 
@@ -76,7 +89,7 @@ with row1_col2:
         title=f"Rolling Win Rate (%) [Window={rolling_window} matches]"
     )
     fig_trend.update_layout(yaxis_range=[0, 100], xaxis_title="Total Matches Played")
-    st.plotly_chart(fig_trend, use_container_width=True)
+    st.plotly_chart(fig_trend, width='stretch')
 
 st.divider()
 
@@ -97,7 +110,7 @@ with row2_col1:
             title="Policy Loss over Time"
         )
         fig_policy.update_layout(xaxis_title="Total Matches Played")
-        st.plotly_chart(fig_policy, use_container_width=True)
+        st.plotly_chart(fig_policy, width='stretch')
     else:
         st.info("No Policy Loss data yet.")
     
@@ -112,7 +125,7 @@ with row2_col2:
             title="Value Loss over Time"
         )
         fig_value.update_layout(xaxis_title="Total Matches Played")
-        st.plotly_chart(fig_value, use_container_width=True)
+        st.plotly_chart(fig_value, width='stretch')
     else:
         st.info("No Value Loss data yet.")
 

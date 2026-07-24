@@ -32,14 +32,16 @@ class BayesianTracker:
         cards = []
         # Gather all visible opponent cards
         for pkmn in opp_state.active:
-            cards.append(pkmn)
-            cards.extend(pkmn.energyCards)
-            cards.extend(pkmn.tools)
+            if pkmn is not None:
+                cards.append(pkmn)
+                cards.extend(pkmn.energyCards)
+                cards.extend(pkmn.tools)
             
         for pkmn in opp_state.bench:
-            cards.append(pkmn)
-            cards.extend(pkmn.energyCards)
-            cards.extend(pkmn.tools)
+            if pkmn is not None:
+                cards.append(pkmn)
+                cards.extend(pkmn.energyCards)
+                cards.extend(pkmn.tools)
             
         cards.extend(opp_state.discard)
         

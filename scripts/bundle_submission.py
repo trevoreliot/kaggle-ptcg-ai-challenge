@@ -17,7 +17,13 @@ def bundle_submission():
     
     print(f"Creating submission bundle at: {tar_path}")
     
+    # Include deck.csv at root level
+    deck_path = os.path.join("assets", "decks", "versatile", "Team_Rockets_Box.csv")
+    
     with tarfile.open(tar_path, "w:gz") as tar:
+        if os.path.exists(deck_path):
+            tar.add(deck_path, arcname="deck.csv")
+            
         for target in targets:
             if not os.path.exists(target):
                 continue

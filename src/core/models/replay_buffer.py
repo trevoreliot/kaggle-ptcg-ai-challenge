@@ -10,9 +10,9 @@ class ReplayBuffer:
         
     def push(self, state: torch.Tensor, action: int, log_prob: torch.Tensor, value: float):
         self.current_episode.append({
-            "state": state.cpu(),
+            "state": state.detach().cpu().numpy(),
             "action": action,
-            "log_prob": log_prob.cpu(),
+            "log_prob": log_prob.detach().cpu().numpy(),
             "value": value
         })
         

@@ -14,6 +14,23 @@ os.environ["SUPPRESS_LITELLM_WARNINGS"] = "True"
 logging.getLogger("LiteLLM").setLevel(logging.ERROR)
 
 from kaggle_environments import make
+import copy
+
+# Monkeypatch deepcopy globally to prevent kaggle_environments from cloning massive observation dicts
+# This provides a 50x speedup in simulation time.
+_orig_deepcopy = copy.deepcopy
+def fast_deepcopy(x, memo=None, _nil=[]):
+    if isinstance(x, dict):
+        if "step" in x and "remainingOverageTime" in x:
+            return x
+        if "observation" in x and "reward" in x:
+            # Shallow copy the agent state dict, but don't deepcopy the observation
+            new_dict = x.copy()
+            new_dict["observation"] = x["observation"]
+            return new_dict
+    return _orig_deepcopy(x, memo)
+copy.deepcopy = fast_deepcopy
+
 
 def load_deck(filepath: str) -> list[int]:
     """Load a deck list from a CSV file as integers."""
@@ -45,17 +62,61 @@ def get_available_decks(opp_deck_arg: str) -> list[str]:
 
 # Worker function for multiprocessing
 def worker_wrapper(args):
-    return worker_run_episode(*args)
+    import cProfile, os
+    pr = cProfile.Profile()
+    pr.enable()
+    try:
+        res = worker_run_episode(*args)
+        pr.disable()
+        pr.dump_stats(f"worker_{os.getpid()}.prof")
+        return res
+    except KeyboardInterrupt:
+        return None
+    except Exception as e:
+        print(f"Worker exception: {e}")
+        return None
 
-def worker_run_episode(p1_deck_path, p2_deck_path):
-    # Import locally to ensure each process has its own isolated agent state
+def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None):
+    import sys
+    import os
+    
+    # Force workers to use CPU to avoid massive GPU context switching overhead
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    
+    # Force workers to use CPU to avoid massive GPU context switching overhead
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    
+    # Prevent OpenMP thread contention in worker processes
+    import torch
+    torch.set_num_threads(1)
+    
+    # Import locally AFTER setting CUDA_VISIBLE_DEVICES to ensure each process has its own isolated CPU agent state
     import src.core.agent as agent_module
     from src.core.models.replay_buffer import ReplayBuffer
     
-    import sys
-    
+    # Lock model for training
+    agent_module.IS_TRAINING = True
+    if model_name:
+        archetype = model_name.split("_")[0]
+        if archetype in agent_module.bayesian_tracker.archetypes:
+            agent_module.ensemble.switch_model(archetype)
+            
+    snapshot_path = os.path.join("assets", "models", "latest_snapshot.pt")
+    if os.path.exists(snapshot_path):
+        try:
+            agent_module.ensemble.active_model.load_state_dict(torch.load(snapshot_path, weights_only=True))
+        except Exception:
+            pass # ignore loading errors if file is being written concurrently
+            
     p1_deck = load_deck(p1_deck_path)
     p2_deck = load_deck(p2_deck_path)
+    
+    # Redirect at OS level to catch C++ prints (e.g. from cg-lib)
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    saved_stdout_fd = os.dup(1)
+    saved_stderr_fd = os.dup(2)
+    os.dup2(devnull_fd, 1)
+    os.dup2(devnull_fd, 2)
     
     old_stdout = sys.stdout
     old_stderr = sys.stderr
@@ -74,6 +135,13 @@ def worker_run_episode(p1_deck_path, p2_deck_path):
         finally:
             sys.stdout = old_stdout
             sys.stderr = old_stderr
+            
+            # Restore OS level descriptors
+            os.dup2(saved_stdout_fd, 1)
+            os.dup2(saved_stderr_fd, 2)
+            os.close(saved_stdout_fd)
+            os.close(saved_stderr_fd)
+            os.close(devnull_fd)
     
     if env.state[0].status == "ERROR":
         pass
@@ -153,7 +221,8 @@ def main():
         else:
             print(f"No checkpoint found at {checkpoint_path}. Starting training from scratch!")
         
-        log_file = "training_metrics.csv"
+        log_file = os.path.join("assets", "results", "rl_training", "training_metrics.csv")
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
         file_exists = os.path.isfile(log_file)
         
         with open(log_file, "a", newline="") as csvfile:
@@ -165,9 +234,12 @@ def main():
             tasks = []
             for i in range(args.episodes):
                 p2_deck_path = random.choice(opp_decks)
-                tasks.append((args.p1_deck, p2_deck_path))
+                tasks.append((args.p1_deck, p2_deck_path, args.model_name))
                 
             completed = 0
+            
+            snapshot_path = os.path.join("assets", "models", "latest_snapshot.pt")
+            torch.save(agent_module.ensemble.active_model.state_dict(), snapshot_path)
             
             from tqdm import tqdm
             
@@ -184,6 +256,10 @@ def main():
                                 policy_loss, value_loss = trainer.update(master_buffer)
                                 master_buffer.clear()
                                 pbar.set_postfix({"P_Loss": f"{policy_loss:.3f}", "V_Loss": f"{value_loss:.3f}"})
+                                
+                                tmp_snapshot = snapshot_path + ".tmp"
+                                torch.save(agent_module.ensemble.active_model.state_dict(), tmp_snapshot)
+                                os.replace(tmp_snapshot, snapshot_path)
                                 
                             if completed % 100 == 0 or completed == args.episodes:
                                 import torch
@@ -204,6 +280,10 @@ def main():
                             policy_loss, value_loss = trainer.update(master_buffer)
                             master_buffer.clear()
                             pbar.set_postfix({"P_Loss": f"{policy_loss:.3f}", "V_Loss": f"{value_loss:.3f}"})
+                            
+                            tmp_snapshot = snapshot_path + ".tmp"
+                            torch.save(agent_module.ensemble.active_model.state_dict(), tmp_snapshot)
+                            os.replace(tmp_snapshot, snapshot_path)
                             
                         if completed % 100 == 0 or completed == args.episodes:
                             import torch

@@ -16,9 +16,9 @@ except ImportError:
     ONNX_AVAILABLE = False
     ort = None
 
-class StateEncoder:
+class FallbackStateEncoder:
     """Fallback encoder if torch is missing."""
-    def __init__(self, feature_size: int = 128):
+    def __init__(self, feature_size: int = 6160):
         self.feature_size = feature_size
         
     def encode_numpy(self, obs: Observation):
@@ -39,7 +39,10 @@ class EnsembleManager:
     """
     def __init__(self, device: str = None):
         self.device = None
-        self.encoder = StateEncoder()
+        if TORCH_AVAILABLE:
+            self.encoder = StateEncoder()
+        else:
+            self.encoder = FallbackStateEncoder()
         
         self.models: Dict[str, Any] = {}
         self.current_mode = "general"
