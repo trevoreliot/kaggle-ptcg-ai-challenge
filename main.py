@@ -60,15 +60,21 @@ def get_available_decks(opp_deck_arg: str) -> list[str]:
     else:
         return [opp_deck_arg]
 
-# Worker function for multiprocessing
 def worker_wrapper(args):
-    import cProfile, os
-    pr = cProfile.Profile()
-    pr.enable()
+    import os
+    p1, p2, model_name, debug = args
+    if debug:
+        import cProfile
+        pr = cProfile.Profile()
+        pr.enable()
+        
     try:
-        res = worker_run_episode(*args)
-        pr.disable()
-        pr.dump_stats(f"worker_{os.getpid()}.prof")
+        res = worker_run_episode(p1, p2, model_name)
+        if debug:
+            pr.disable()
+            out_dir = os.path.join("logs", "debug", "worker_profiles")
+            os.makedirs(out_dir, exist_ok=True)
+            pr.dump_stats(os.path.join(out_dir, f"worker_{os.getpid()}.prof"))
         return res
     except KeyboardInterrupt:
         return None
@@ -168,6 +174,8 @@ def main():
                         help="Number of parallel worker processes for training.")
     parser.add_argument("--model-name", type=str, default="general_model.pt",
                         help="Name of the model file to save/load (e.g. aggro_model.pt).")
+    parser.add_argument("--debug", action="store_true",
+                        help="Enable cProfile worker profiling.")
     args = parser.parse_args()
 
     # Play mode (synchronous, 1 match)
@@ -221,7 +229,9 @@ def main():
         else:
             print(f"No checkpoint found at {checkpoint_path}. Starting training from scratch!")
         
-        log_file = os.path.join("assets", "results", "rl_training", "training_metrics.csv")
+        model_prefix = args.model_name.replace("_model.pt", "").replace(".pt", "") if args.model_name else "general"
+        csv_filename = f"{model_prefix}_training_metrics.csv"
+        log_file = os.path.join("assets", "results", "rl_training", csv_filename)
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
         file_exists = os.path.isfile(log_file)
         
@@ -234,7 +244,7 @@ def main():
             tasks = []
             for i in range(args.episodes):
                 p2_deck_path = random.choice(opp_decks)
-                tasks.append((args.p1_deck, p2_deck_path, args.model_name))
+                tasks.append((args.p1_deck, p2_deck_path, args.model_name, args.debug))
                 
             completed = 0
             
@@ -271,7 +281,7 @@ def main():
                 else:
                     # Run synchronously
                     for task in tasks:
-                        p2_path, reward, ep_len, trajectory = worker_run_episode(*task)
+                        p2_path, reward, ep_len, trajectory = worker_run_episode(*task[:3])
                         completed += 1
                         master_buffer.add_trajectory(trajectory)
                         

@@ -37,18 +37,42 @@ if df.empty:
     st.warning(f"No training data found in {selected_csv}!")
     st.stop()
 
+# ---- Filters ----
+st.sidebar.header("Filters")
+min_match = st.sidebar.number_input("Start from Match # (e.g. 100000)", min_value=0, value=0, step=1000)
+
+if min_match > 0 and len(df) > min_match:
+    df = df.iloc[min_match:]
+elif min_match > 0:
+    st.warning(f"Dataset only has {len(df)} matches. Cannot filter from {min_match}.")
+
+if df.empty:
+    st.warning("Filtered dataset is empty!")
+    st.stop()
+
 # ---- KPIs ----
 col1, col2, col3, col4 = st.columns(4)
 total_episodes = len(df)
 global_winrate = (df["Reward"] == 1).mean() * 100
 avg_len = df["Episode_Length"].mean()
+
+# Latest 1000 stats
+recent_df = df.tail(1000)
+recent_winrate = (recent_df["Reward"] == 1).mean() * 100 if not recent_df.empty else 0.0
+recent_avg_len = recent_df["Episode_Length"].mean() if not recent_df.empty else 0.0
+
 latest_policy_loss = df["Policy_Loss"].iloc[-1] if not df.empty else 0
 latest_value_loss = df["Value_Loss"].iloc[-1] if not df.empty else 0
 
-col1.metric("Total Matches", f"{total_episodes:,}")
-col2.metric("Global Win Rate", f"{global_winrate:.2f}%")
-col3.metric("Avg Episode Length", f"{avg_len:.1f} turns")
+col1.metric("Total Matches (Filtered)", f"{total_episodes:,}")
+col2.metric("Global Win Rate", f"{global_winrate:.1f}%")
+col3.metric("Avg Episode Length", f"{avg_len:.1f}")
 col4.metric("Latest Losses (P/V)", f"{latest_policy_loss:.2f} / {latest_value_loss:.2f}")
+
+# Row 2 for recent metrics, aligned under the global ones
+r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
+r2_c2.metric("Recent Win Rate (1k)", f"{recent_winrate:.1f}%")
+r2_c3.metric("Recent Avg Length (1k)", f"{recent_avg_len:.1f}")
 
 st.divider()
 
