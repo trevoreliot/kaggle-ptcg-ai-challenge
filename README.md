@@ -34,7 +34,8 @@ Below is an ASCII diagram representing the current execution pipeline and game s
 |                   src/core/models/trainer.py                |
 |  - Samples batches from master_buffer                       |
 |  - Backpropagates Policy & Value Loss to ensemble model     |
-|  - main.py periodically saves general_model.pt              |
+|  - main.py dynamically routes weights to [model-name].pt    |
+|  - main.py exports [model-prefix]_training_metrics.csv      |
 +-------------------------------------------------------------+
 
 Inside each Worker (env.run):
@@ -64,6 +65,9 @@ Inside each Worker (env.run):
 ```
 
 ### Recent System Design Enhancements
+- **Deep Architecture**:
+  - Replaced the initial 3-layer MLP with a massive **5.6M parameter Residual-MLP** (4 Residual Blocks).
+  - Designed a high-dimensional **StateEncoder (6,160 dim)** using Bag-of-Words vectors to precisely track Card IDs across Hand, Bench, Active, and Discard zones.
 - **Performance Scaling**: 
   - Isolated GPU contexts from multiprocessing workers by forcing CPU execution (`CUDA_VISIBLE_DEVICES="-1"`) and OpenMP thread limiting (`torch.set_num_threads(1)`).
   - Reduced IPC queue bottleneck by moving away from raw PyTorch tensors to lightweight Numpy array serializations within the ReplayBuffer.
@@ -95,6 +99,19 @@ Inside each Worker (env.run):
   - `bundle_submission.py`: Compresses necessary code and models into a `<197.7 MiB` `.tar.gz`.
   - `tune_bayesian.py`: Tool for calibrating the Bayesian detector's speed against test decks.
 - `main.py`: Our top-level script for initiating local simulations and training workers.
+
+## `main.py` Parameters
+The simulator orchestrates jobs via the CLI. Below are the accepted arguments:
+
+| Argument | Description | Default | Choices |
+| :--- | :--- | :--- | :--- |
+| `--mode` | Execution mode. 'play' renders an HTML visual match. 'train' runs headless fast simulation. | `play` | `play`, `train` |
+| `--p1-deck` | Path or name of Player 1's deck CSV. | `assets/decks/versatile/Team_Rockets_Box.csv` | |
+| `--opp-deck` | Path to specific deck, folder of decks, or 'all' to randomly pull from all valid decks. | `all` | |
+| `--episodes` | Number of matches to simulate (only used in 'train' mode). | `1` | |
+| `--workers` | Number of parallel worker processes for training. | `1` | |
+| `--model-name` | Name of the PyTorch weights to load and save to (e.g. `aggro_model.pt`). Determines CSV logging prefix. | `general_model.pt` | |
+| `--debug` | Flag to enable cProfile worker profiling. Output is dumped to `logs/debug/worker_profiles/`. | `False` | |
 
 ## Usage Commands
 
