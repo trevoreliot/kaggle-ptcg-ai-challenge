@@ -62,14 +62,14 @@ def get_available_decks(opp_deck_arg: str) -> list[str]:
 
 def worker_wrapper(args):
     import os
-    p1, p2, model_name, debug = args
+    p1, p2, model_name, debug, p2_type, p2_agent = args
     if debug:
         import cProfile
         pr = cProfile.Profile()
         pr.enable()
         
     try:
-        res = worker_run_episode(p1, p2, model_name)
+        res = worker_run_episode(p1, p2, model_name, p2_type, p2_agent)
         if debug:
             pr.disable()
             out_dir = os.path.join("logs", "debug", "worker_profiles")
@@ -82,7 +82,7 @@ def worker_wrapper(args):
         print(f"Worker exception: {e}")
         return None
 
-def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None):
+def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None, p2_type="rl", p2_agent_name=None):
     import sys
     import os
     
@@ -136,8 +136,15 @@ def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None):
             local_buffer = ReplayBuffer(gamma=0.99)
             agent_module.global_replay_buffer = local_buffer
             
+            p1_func = agent_module.agent
+            p2_func = agent_module.agent
+            
+            if p2_type == "rules":
+                from src.core.rules_agents import get_rules_agent
+                p2_func = get_rules_agent(p2_agent_name)
+            
             env.reset()
-            env.run([agent_module.agent, agent_module.agent])
+            env.run([p1_func, p2_func])
         finally:
             sys.stdout = old_stdout
             sys.stderr = old_stderr
@@ -158,7 +165,11 @@ def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None):
     # Calculate episode length (rough estimate by actions or step count)
     episode_length = len(env.steps)
     
-    return p2_deck_path, reward, episode_length, trajectory
+    opponent_name = p2_deck_path
+    if p2_type == "rules":
+        opponent_name = f"[RULES] {p2_agent_name}"
+        
+    return opponent_name, reward, episode_length, trajectory
 
 def main():
     parser = argparse.ArgumentParser(description="Pokémon TCG AI Challenge Simulator")
@@ -174,6 +185,10 @@ def main():
                         help="Number of parallel worker processes for training.")
     parser.add_argument("--model-name", type=str, default="general_model.pt",
                         help="Name of the model file to save/load (e.g. aggro_model.pt).")
+    parser.add_argument("--p2-type", type=str, choices=["rl", "rules"], default="rl",
+                        help="The type of agent Player 2 is.")
+    parser.add_argument("--p2-agent", type=str, default="all",
+                        help="The specific rules-based agent to use if --p2-type is rules (or 'all' for random).")
     parser.add_argument("--debug", action="store_true",
                         help="Enable cProfile worker profiling.")
     args = parser.parse_args()
@@ -198,8 +213,21 @@ def main():
         import src.core.agent as agent_module
         agent_module._local_env_ref = env
         
+        p1_func = agent_module.agent
+        p2_func = agent_module.agent
+        
+        p2_agent_name = args.p2_agent
+        if args.p2_type == "rules" and (args.p2_agent == "all" or not args.p2_agent):
+            from src.core.rules_agents import get_available_rules_agents
+            p2_agent_name = random.choice(get_available_rules_agents())
+            print(f"Randomly selected rules agent: {p2_agent_name}")
+        
+        if args.p2_type == "rules":
+            from src.core.rules_agents import get_rules_agent
+            p2_func = get_rules_agent(p2_agent_name)
+            
         print(f"Running single match against {p2_deck_path} in 'play' mode...")
-        env.run([agent_module.agent, agent_module.agent])
+        env.run([p1_func, p2_func])
         print("Match finished. Saving results...")
         with open("result.html", "w") as f:
             f.write(env.render(mode="html"))
@@ -240,11 +268,21 @@ def main():
             if not file_exists:
                 writer.writerow(["Episode", "Opponent_Deck", "Reward", "Episode_Length", "Policy_Loss", "Value_Loss"])
             
+            if args.p2_type == "rules":
+                from src.core.rules_agents import get_available_rules_agents
+                if args.p2_agent == "all" or not args.p2_agent:
+                    available_p2_agents = get_available_rules_agents()
+                else:
+                    available_p2_agents = [args.p2_agent]
+            else:
+                available_p2_agents = [None]
+                
             # Prepare tasks
             tasks = []
             for i in range(args.episodes):
                 p2_deck_path = random.choice(opp_decks)
-                tasks.append((args.p1_deck, p2_deck_path, args.model_name, args.debug))
+                p2_agent_choice = random.choice(available_p2_agents)
+                tasks.append((args.p1_deck, p2_deck_path, args.model_name, args.debug, args.p2_type, p2_agent_choice))
                 
             completed = 0
             
@@ -281,7 +319,7 @@ def main():
                 else:
                     # Run synchronously
                     for task in tasks:
-                        p2_path, reward, ep_len, trajectory = worker_run_episode(*task[:3])
+                        p2_path, reward, ep_len, trajectory = worker_run_episode(task[0], task[1], task[2], task[4], task[5])
                         completed += 1
                         master_buffer.add_trajectory(trajectory)
                         
