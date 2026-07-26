@@ -18,6 +18,14 @@ global_replay_buffer = None
 # Set by main.py during training to prevent hot-swapping
 IS_TRAINING = False
 
+# Set by main.py during evaluate mode for diagnostics
+IS_EVALUATING = False
+evaluation_telemetry = {
+    "entropy": [],
+    "hand_sizes": [],
+    "action_paralysis": 0
+}
+
 # Cache for loaded decks to prevent extreme disk I/O in worker processes
 _opp_deck_cache = {}
 
@@ -70,13 +78,27 @@ def agent(obs_dict: dict) -> list[int]:
     # Evaluate the current state using the Policy Network to get value for buffer
     value, policy_logits = ensemble.evaluate(parsed_obs)
     
+    if IS_EVALUATING:
+        import torch
+        import torch.nn.functional as F
+        # Calculate entropy
+        logits_tensor = torch.tensor(policy_logits, dtype=torch.float32)
+        probs = F.softmax(logits_tensor, dim=0)
+        entropy = -torch.sum(probs * torch.log(probs + 1e-8)).item()
+        evaluation_telemetry["entropy"].append(entropy)
+        
+        # Calculate hand size
+        my_player = parsed_obs.current.players[parsed_obs.current.yourIndex]
+        my_hand = my_player.hand if my_player.hand is not None else []
+        evaluation_telemetry["hand_sizes"].append(len(my_hand))
+    
     # Set up MCTS Evaluator
     def mcts_evaluator(search_state):
         # We can just return a heuristic or 0.0 for now, 
         # since deep state conversion is complex.
         return 0.0
         
-    mcts = MCTSEngine(evaluator=mcts_evaluator, num_simulations=5) # 5 simulations for speed
+    mcts = MCTSEngine(evaluator=mcts_evaluator, num_simulations=25) # 25 simulations for deeper training
     
     # Approximate opponent deck based on Bayesian Tracker
     best_archetype = bayesian_tracker.best_archetype()
@@ -98,6 +120,10 @@ def agent(obs_dict: dict) -> list[int]:
     if not selections:
         options = parsed_obs.select.option
         max_count = min(parsed_obs.select.maxCount, len(options))
+        if max_count == 0:
+            if IS_EVALUATING:
+                evaluation_telemetry["action_paralysis"] += 1
+            return []
         valid_logits = np.array(policy_logits[:len(options)])
         exp_logits = np.exp(valid_logits - np.max(valid_logits))
         valid_probs = exp_logits / exp_logits.sum()
