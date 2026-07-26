@@ -65,13 +65,26 @@ class MCTSEngine:
             
         cg_obs = cg_api.to_observation_class(obs_dict)
         
-        # Approximate hidden states
+        st = cg_obs.current
+        your_p = st.players[st.yourIndex]
+        opp_p = st.players[1 - st.yourIndex]
+        
         your_deck = [] if cg_obs.select.deck else agent_deck.copy() 
-        your_prize = [5] * 6 # approximate with default cards if unknown
+        if len(your_deck) < your_p.deckCount:
+            your_deck.extend([5] * (your_p.deckCount - len(your_deck)))
+            
+        your_prize = [5] * max(1, len(your_p.prize))
+        
         opponent_deck = opponent_deck_pred.copy()
-        opponent_prize = [5] * 6
-        opponent_hand = [5] * 5
-        opponent_active = [] # optional unless required by env
+        if len(opponent_deck) < opp_p.deckCount:
+            opponent_deck.extend([5] * (opp_p.deckCount - len(opponent_deck)))
+            
+        opponent_prize = [5] * max(1, len(opp_p.prize))
+        opponent_hand = [5] * max(1, opp_p.handCount)
+        
+        opponent_active = []
+        if len(opp_p.active) > 0 and opp_p.active[0] is None:
+            opponent_active = [722] # 722 is a valid Basic Pokemon ID just in case
         
         try:
             root_state = cg_api.search_begin(
@@ -116,16 +129,31 @@ class MCTSEngine:
                 node = child
             
             # 3. Evaluate
+            leaf_player = root.search_state.observation.current.yourIndex
             if not node.is_terminal and node.search_state is not None:
                 value = self.evaluator(node.search_state) 
+                leaf_player = node.search_state.observation.current.yourIndex
             else:
                 value = -1.0 # Terminal or error
+                if node.search_state is not None and node.search_state.observation.current.result != -1:
+                    res = node.search_state.observation.current.result
+                    # result 1=win, 2=loss, 3=draw (for the active player)
+                    if res == 1: value = 1.0
+                    elif res == 2: value = -1.0
+                    else: value = 0.0
+                    leaf_player = node.search_state.observation.current.yourIndex
             
             # 4. Backpropagate
-            while node is not None:
-                node.visits += 1
-                node.value += value
-                node = node.parent
+            curr = node
+            while curr is not None:
+                curr.visits += 1
+                if curr.parent is not None and curr.parent.search_state is not None:
+                    parent_player = curr.parent.search_state.observation.current.yourIndex
+                    curr.value += value if parent_player == leaf_player else -value
+                else:
+                    root_player = root.search_state.observation.current.yourIndex
+                    curr.value += value if root_player == leaf_player else -value
+                curr = curr.parent
                 
         # Return most visited action
         best_action_idx = -1
@@ -139,12 +167,23 @@ class MCTSEngine:
         cg_api.search_end()
         
         if best_action_idx >= 0:
-            # Handle maxCount > 1 if required by the root options
+            # Handle maxCount > 1 by following the principal variation
             max_c = cg_obs.select.maxCount
             selections = [best_action_idx]
-            if max_c > 1:
-                others = [x for x in range(len(cg_obs.select.option)) if x != best_action_idx]
-                selections.extend(random.sample(others, min(max_c - 1, len(others))))
+            curr = best_child
+            
+            while len(selections) < max_c and curr is not None and curr.children:
+                # Check if the next state is still part of the same action sequence
+                if curr.search_state is None or curr.search_state.observation.select is None:
+                    break
+                best_next = max(curr.children, key=lambda c: c.visits)
+                selections.append(best_next.action)
+                curr = best_next
+                
+            if len(selections) < cg_obs.select.minCount:
+                others = [x for x in range(len(cg_obs.select.option)) if x not in selections]
+                needed = cg_obs.select.minCount - len(selections)
+                selections.extend(random.sample(others, min(needed, len(others))))
             return selections
         return []
 

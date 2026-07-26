@@ -94,9 +94,13 @@ def agent(obs_dict: dict) -> list[int]:
     
     # Set up MCTS Evaluator
     def mcts_evaluator(search_state):
-        # We can just return a heuristic or 0.0 for now, 
-        # since deep state conversion is complex.
-        return 0.0
+        if search_state is None or search_state.observation is None:
+            return 0.0
+        try:
+            val, _ = ensemble.evaluate(search_state.observation)
+            return val
+        except Exception:
+            return 0.0
         
     mcts = MCTSEngine(evaluator=mcts_evaluator, num_simulations=25) # 25 simulations for deeper training
     
@@ -127,11 +131,17 @@ def agent(obs_dict: dict) -> list[int]:
         valid_logits = np.array(policy_logits[:len(options)])
         exp_logits = np.exp(valid_logits - np.max(valid_logits))
         valid_probs = exp_logits / exp_logits.sum()
-        action = np.random.choice(len(options), p=valid_probs)
-        selections = [action]
-        if max_count > 1:
-            others = [x for x in range(len(options)) if x != action]
-            selections.extend(random.sample(others, min(max_count - 1, len(others))))
+        
+        try:
+            sampled_actions = np.random.choice(len(options), size=max_count, replace=False, p=valid_probs)
+            selections = sampled_actions.tolist()
+        except ValueError:
+            # Fallback if probability array has issues (e.g. fewer non-zero probs than max_count)
+            action = np.random.choice(len(options), p=valid_probs)
+            selections = [action]
+            if max_count > 1:
+                others = [x for x in range(len(options)) if x != action]
+                selections.extend(random.sample(others, min(max_count - 1, len(others))))
     
     # Push to Replay Buffer if training
     if global_replay_buffer is not None:
@@ -140,6 +150,9 @@ def agent(obs_dict: dict) -> list[int]:
             # Re-encode the state to save in buffer (detached)
             state_tensor = ensemble.encoder.encode(parsed_obs).unsqueeze(0).detach()
             dummy_log_prob = torch.tensor([0.0])
+            # Note: The replay buffer and trainer currently only support learning from the FIRST action 
+            # in a multi-select sequence. A sequence-to-sequence or auto-regressive model would be needed 
+            # to learn from the full `selections` list.
             action = selections[0] if selections else 0
             global_replay_buffer.push(state_tensor, action, dummy_log_prob, value)
         except Exception as e:
