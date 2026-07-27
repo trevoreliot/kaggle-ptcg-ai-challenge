@@ -140,9 +140,23 @@ def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None, p2_type="rl"
             p1_func = agent_module.agent
             p2_func = agent_module.agent
             
+            if p2_type == "mixed":
+                p2_type = "rl" if random.random() < 0.8 else "rules"
+            
+            p2_actual_name = p2_agent_name
             if p2_type == "rules":
+                from src.core.rules_agents import get_available_rules_agents
                 from src.core.rules_agents import get_rules_agent
-                p2_func = get_rules_agent(p2_agent_name)
+                if not p2_actual_name or p2_actual_name == "all":
+                    p2_actual_name = random.choice(get_available_rules_agents())
+                p2_func = get_rules_agent(p2_actual_name)
+            else:
+                def p2_rl_wrapper(obs):
+                    agent_module.global_replay_buffer = None
+                    action = agent_module.agent(obs)
+                    agent_module.global_replay_buffer = local_buffer
+                    return action
+                p2_func = p2_rl_wrapper
             
             env.reset()
             env.run([p1_func, p2_func])
@@ -168,7 +182,9 @@ def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None, p2_type="rl"
     
     opponent_name = p2_deck_path
     if p2_type == "rules":
-        opponent_name = f"[RULES] {p2_agent_name}"
+        opponent_name = f"[RULES] {p2_actual_name}"
+    else:
+        opponent_name = f"[SELF-PLAY] {os.path.basename(p2_deck_path)}"
         
     return opponent_name, reward, episode_length, trajectory
 
@@ -186,7 +202,7 @@ def main():
                         help="Number of parallel worker processes for training.")
     parser.add_argument("--model-name", type=str, default="general_model.pt",
                         help="Name of the model file to save/load (e.g. aggro_model.pt).")
-    parser.add_argument("--p2-type", type=str, choices=["rl", "rules"], default="rl",
+    parser.add_argument("--p2-type", type=str, choices=["rl", "rules", "mixed"], default="rl",
                         help="The type of agent Player 2 is.")
     parser.add_argument("--p2-agent", type=str, default="all",
                         help="The specific rules-based agent to use if --p2-type is rules (or 'all' for random).")
@@ -194,8 +210,8 @@ def main():
                         help="Enable cProfile worker profiling.")
     args = parser.parse_args()
     
-    if args.p2_type == "rl" and args.p2_agent != "all":
-        parser.error(f"You provided a specific --p2-agent ('{args.p2_agent}'), but --p2-type is set to 'rl'. To play against a rules-based agent, you must set --p2-type rules.")
+    if args.p2_type in ["rl", "mixed"] and args.p2_agent != "all":
+        parser.error(f"You provided a specific --p2-agent ('{args.p2_agent}'), but --p2-type is set to '{args.p2_type}'. To play against a rules-based agent, you must set --p2-type rules.")
 
     # Play mode (synchronous, 1 match)
     if args.mode == "play":

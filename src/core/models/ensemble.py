@@ -58,7 +58,11 @@ class EnsembleManager:
             self.models["general"] = self.active_model
         elif ONNX_AVAILABLE:
             self.use_onnx = True
-            onnx_path = os.path.join("assets", "models", "general.onnx")
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+            onnx_path = os.path.join(project_root, "assets", "models", "general_model.onnx")
+            if not os.path.exists(onnx_path):
+                # Fallback to relative if the structure is different
+                onnx_path = os.path.join("assets", "models", "general_model.onnx")
             if os.path.exists(onnx_path):
                 self.active_model = ort.InferenceSession(onnx_path)
                 self.models["general"] = self.active_model

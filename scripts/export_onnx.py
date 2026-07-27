@@ -16,7 +16,7 @@ def export_onnx():
         print("No .pt models found to export!")
         return
         
-    dummy_input = torch.randn(1, 128).to(device)
+    dummy_input = torch.randn(1, 6160).to(device)
     
     for pt_file in pt_files:
         basename = os.path.basename(pt_file)

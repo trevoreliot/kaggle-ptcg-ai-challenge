@@ -31,8 +31,12 @@ _opp_deck_cache = {}
 
 def load_deck(filepath: str = "Team_Rockets_Box.csv") -> list[int]:
     """Load a deck list from a CSV file."""
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     search_paths = [
         filepath,
+        "deck.csv",
+        os.path.join(project_root, "deck.csv"),
+        os.path.join(project_root, "assets", "decks", "versatile", filepath),
         os.path.join("assets", "decks", "versatile", filepath)
     ]
     for path in search_paths:
@@ -102,14 +106,19 @@ def agent(obs_dict: dict) -> list[int]:
         except Exception:
             return 0.0
         
-    mcts = MCTSEngine(evaluator=mcts_evaluator, num_simulations=25) # 25 simulations for deeper training
+    num_sims = int(os.environ.get("MCTS_SIMS", 50))
+    mcts = MCTSEngine(evaluator=mcts_evaluator, num_simulations=num_sims)
     
     # Approximate opponent deck based on Bayesian Tracker
     best_archetype = bayesian_tracker.best_archetype()
     if best_archetype in _opp_deck_cache:
         opponent_deck_pred = _opp_deck_cache[best_archetype].copy()
     else:
-        opp_deck_path = os.path.join("assets", "decks", best_archetype, "default.csv")
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        opp_deck_path = os.path.join(project_root, "assets", "decks", best_archetype, "default.csv")
+        if not os.path.exists(opp_deck_path):
+            opp_deck_path = os.path.join("assets", "decks", best_archetype, "default.csv")
+            
         if os.path.exists(opp_deck_path):
             with open(opp_deck_path, "r") as f:
                 opponent_deck_pred = [int(line.strip()) for line in f.readlines() if line.strip()]
