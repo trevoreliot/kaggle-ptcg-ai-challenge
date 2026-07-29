@@ -80,7 +80,9 @@ def agent(obs_dict: dict) -> list[int]:
     """
     Smart agent utilizing PyTorch Ensemble and Bayesian Tracking.
     """
-    if obs_dict.get("step", 0) == 0:
+    # The cabt environment does not natively provide 'step' in the observation payload.
+    # The deck selection phase (step 0) is uniquely identified by the absence of 'select'.
+    if obs_dict.get("select") is None:
         # Reset bayesian tracker for a new match
         global bayesian_tracker
         bayesian_tracker = BayesianTracker()
@@ -166,19 +168,24 @@ def agent(obs_dict: dict) -> list[int]:
                 evaluation_telemetry["action_paralysis"] += 1
             return []
         valid_logits = np.array(policy_logits[:len(options)])
-        exp_logits = np.exp(valid_logits - np.max(valid_logits))
-        valid_probs = exp_logits / exp_logits.sum()
         
-        try:
-            sampled_actions = np.random.choice(len(options), size=max_count, replace=False, p=valid_probs)
-            selections = sampled_actions.tolist()
-        except ValueError:
-            # Fallback if probability array has issues (e.g. fewer non-zero probs than max_count)
-            action = np.random.choice(len(options), p=valid_probs)
-            selections = [action]
-            if max_count > 1:
-                others = [x for x in range(len(options)) if x != action]
-                selections.extend(random.sample(others, min(max_count - 1, len(others))))
+        if IS_TRAINING:
+            exp_logits = np.exp(valid_logits - np.max(valid_logits))
+            valid_probs = exp_logits / exp_logits.sum()
+            try:
+                sampled_actions = np.random.choice(len(options), size=max_count, replace=False, p=valid_probs)
+                selections = sampled_actions.tolist()
+            except ValueError:
+                # Fallback if probability array has issues (e.g. fewer non-zero probs than max_count)
+                action = np.random.choice(len(options), p=valid_probs)
+                selections = [action]
+                if max_count > 1:
+                    others = [x for x in range(len(options)) if x != action]
+                    selections.extend(random.sample(others, min(max_count - 1, len(others))))
+        else:
+            # Greedy decoding for evaluation/inference
+            best_indices = np.argsort(valid_logits)[::-1]
+            selections = best_indices[:max_count].tolist()
     
     # Push to Replay Buffer if training (only for Player 1 to avoid mixed rewards in self-play)
     if global_replay_buffer is not None and parsed_obs.current.yourIndex == 0:

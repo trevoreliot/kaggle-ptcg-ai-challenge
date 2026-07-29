@@ -170,6 +170,15 @@ def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None, p2_type="rl"
             agent_module.reset_state_tracking()
             env.reset()
             env.run([p1_func, p2_func])
+            
+            # Check for invalid actions to prevent poor training data
+            for step_idx, step_data in enumerate(env.steps):
+                for p_idx, player_state in enumerate(step_data):
+                    status = player_state.status if hasattr(player_state, 'status') else player_state.get('status')
+                    if status == 'INVALID':
+                        action = player_state.action if hasattr(player_state, 'action') else player_state.get('action')
+                        raise AssertionError(f"INVALID ACTION DETECTED by Player {p_idx} (Step {step_idx})!\nAction Taken: {action}\nAborting training to prevent poor data pollution.")
+                        
         finally:
             sys.stdout = old_stdout
             sys.stderr = old_stderr

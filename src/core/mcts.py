@@ -167,23 +167,13 @@ class MCTSEngine:
         cg_api.search_end()
         
         if best_action_idx >= 0:
-            # Handle maxCount > 1 by following the principal variation
-            max_c = cg_obs.select.maxCount
-            selections = [best_action_idx]
-            curr = best_child
-            
-            while len(selections) < max_c and curr is not None and curr.children:
-                # Check if the next state is still part of the same action sequence
-                if curr.search_state is None or curr.search_state.observation.select is None:
-                    break
-                best_next = max(curr.children, key=lambda c: c.visits)
-                selections.append(best_next.action)
-                curr = best_next
+            # If the engine allows multiple selections (maxCount > 1), MCTS's single-action
+            # edge exploration is insufficient and combinatorial. We return empty to let
+            # the Policy network in agent.py handle the combination sampling natively.
+            if cg_obs.select.maxCount > 1:
+                return []
                 
-            if len(selections) < cg_obs.select.minCount:
-                others = [x for x in range(len(cg_obs.select.option)) if x not in selections]
-                needed = cg_obs.select.minCount - len(selections)
-                selections.extend(random.sample(others, min(needed, len(others))))
-            return selections
+            return [best_action_idx]
+            
         return []
 

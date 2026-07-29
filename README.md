@@ -40,8 +40,13 @@ Below is an ASCII diagram representing the current execution pipeline and game s
 
 Inside each Worker (env.run):
 +-------------------------------------------------+
+|           main.py (Environment Setup)           |
+|  (Routes P2 to RL Model or Rules-Based Agent)   |
++------------------------+------------------------+
+                         |
++------------------------v------------------------+
 |                 src/core/agent.py               |
-|  (Agent receives raw JSON obs_dict each turn)   |
+|  (RL Agent receives raw JSON obs_dict each turn)|
 +------------------------+------------------------+
                          |
 +------------------------v------------------------+
@@ -105,12 +110,14 @@ The simulator orchestrates jobs via the CLI. Below are the accepted arguments:
 
 | Argument | Description | Default | Choices |
 | :--- | :--- | :--- | :--- |
-| `--mode` | Execution mode. 'play' renders an HTML visual match. 'train' runs headless fast simulation. | `play` | `play`, `train` |
+| `--mode` | Execution mode. 'play' renders HTML, 'train' runs headless fast simulation, 'evaluate' runs diagnostics. | `play` | `play`, `train`, `evaluate` |
 | `--p1-deck` | Path or name of Player 1's deck CSV. | `assets/decks/versatile/Team_Rockets_Box.csv` | |
 | `--opp-deck` | Path to specific deck, folder of decks, or 'all' to randomly pull from all valid decks. | `all` | |
-| `--episodes` | Number of matches to simulate (only used in 'train' mode). | `1` | |
+| `--episodes` | Number of matches to simulate (only used in 'train' and 'evaluate' modes). | `1` | |
 | `--workers` | Number of parallel worker processes for training. | `1` | |
-| `--model-name` | Name of the PyTorch weights to load and save to (e.g. `aggro_model.pt`). Determines CSV logging prefix. | `general_model.pt` | |
+| `--model-name` | Name of the PyTorch weights to load/save (e.g. `aggro_model.pt`). Determines CSV logging prefix. | `general_model.pt` | |
+| `--p2-type` | The type of agent Player 2 is. Use 'rules' to play/train against hardcoded agents. | `rl` | `rl`, `rules`, `mixed` |
+| `--p2-agent` | The specific rules-based agent to use if `--p2-type` is rules (or 'all', 'aggro', 'control', 'prob'). | `all` | |
 | `--debug` | Flag to enable cProfile worker profiling. Output is dumped to `logs/debug/worker_profiles/`. | `False` | |
 
 ## Usage Commands
@@ -128,4 +135,14 @@ uv run python main.py --mode train --opp-deck all --workers 16 --episodes 100000
 **3. Launch Live Training Dashboard:**
 ```bash
 uv run streamlit run src/viz/rl_training_dashboard.py
+```
+
+**4. Train against Rules-Based Agents (Mixed Strategies):**
+```bash
+uv run python main.py --mode train --episodes 10000 --workers 16 --p2-type rules --p2-agent all
+```
+
+**5. Evaluate Model Diagnostics:**
+```bash
+uv run python main.py --mode evaluate --episodes 100 --model-name general_model.pt
 ```
