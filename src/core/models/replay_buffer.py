@@ -8,19 +8,20 @@ class ReplayBuffer:
         self.buffer = []
         self.current_episode = []
         
-    def push(self, state: torch.Tensor, action: int, log_prob: torch.Tensor, value: float):
+    def push(self, state: torch.Tensor, action: int, log_prob: torch.Tensor, value: float, step_reward: float = 0.0):
         self.current_episode.append({
             "state": state.detach().cpu().numpy(),
             "action": action,
             "log_prob": log_prob.detach().cpu().numpy(),
-            "value": value
+            "value": value,
+            "step_reward": step_reward
         })
         
     def finalize_episode(self, reward: float) -> List[dict]:
         R = reward
         completed_episode = []
         for step in reversed(self.current_episode):
-            R = R * self.gamma
+            R = step.get("step_reward", 0.0) + (R * self.gamma)
             step["return"] = R
             completed_episode.insert(0, step)
             

@@ -11,7 +11,7 @@ This deck battles by strategically switching between Mega Lucario ex as the main
 """
 
 # Load deck.csv in the dataset
-file_path = os.path.join("assets", "decks", "versatile", "Team_Rockets_Box.csv")
+file_path = os.path.join("assets", "decks", "rules", "mega_lucario_ex_deck.csv")
 if not os.path.exists(file_path):
     file_path = "/kaggle_simulations/agent/" + file_path
 with open(file_path, "r") as file:

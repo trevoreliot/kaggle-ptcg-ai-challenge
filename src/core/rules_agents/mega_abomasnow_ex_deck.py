@@ -11,7 +11,7 @@ This is a simple deck that attacks with Hammer-lanche.
 """
 
 # Load deck.csv in the dataset
-file_path = os.path.join("assets", "decks", "versatile", "Team_Rockets_Box.csv")
+file_path = os.path.join("assets", "decks", "rules", "mega_abomasnow_ex_deck.csv")
 if not os.path.exists(file_path):
     file_path = "/kaggle_simulations/agent/" + file_path
 with open(file_path, "r") as file:

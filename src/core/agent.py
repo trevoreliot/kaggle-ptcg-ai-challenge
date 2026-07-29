@@ -29,6 +29,34 @@ evaluation_telemetry = {
 # Cache for loaded decks to prevent extreme disk I/O in worker processes
 _opp_deck_cache = {}
 
+# State tracking for dense intermediate rewards during training
+_state_tracker = {}
+for _p in [0, 1]:
+    _state_tracker[_p] = {
+        "initialized": False,
+        "my_prizes": 6,
+        "opp_prizes": 6,
+        "my_deck": 60,
+        "last_state": None,
+        "last_actions": None,
+        "last_log_prob": None,
+        "last_value": None
+    }
+
+def reset_state_tracking():
+    global _state_tracker
+    for _p in [0, 1]:
+        _state_tracker[_p] = {
+            "initialized": False,
+            "my_prizes": 6,
+            "opp_prizes": 6,
+            "my_deck": 60,
+            "last_state": None,
+            "last_actions": None,
+            "last_log_prob": None,
+            "last_value": None
+        }
+
 def load_deck(filepath: str = "Team_Rockets_Box.csv") -> list[int]:
     """Load a deck list from a CSV file."""
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -152,18 +180,61 @@ def agent(obs_dict: dict) -> list[int]:
                 others = [x for x in range(len(options)) if x != action]
                 selections.extend(random.sample(others, min(max_count - 1, len(others))))
     
-    # Push to Replay Buffer if training
-    if global_replay_buffer is not None:
+    # Push to Replay Buffer if training (only for Player 1 to avoid mixed rewards in self-play)
+    if global_replay_buffer is not None and parsed_obs.current.yourIndex == 0:
+        # Calculate step rewards for dense reward shaping
+        step_reward = 0.0
+        
+        me_idx = parsed_obs.current.yourIndex
+        my_player = parsed_obs.current.players[me_idx]
+        opp_player = parsed_obs.current.players[1 - me_idx]
+        my_prizes = len([p for p in my_player.prize if p is not None])
+        opp_prizes = len([p for p in opp_player.prize if p is not None])
+        my_deck = my_player.deckCount
+        
+        tracker = _state_tracker[me_idx]
+        
+        # Calculate deltas if state is initialized
+        if tracker["initialized"]:
+            prizes_taken = tracker["opp_prizes"] - opp_prizes
+            prizes_lost = tracker["my_prizes"] - my_prizes
+            
+            if prizes_taken > 0:
+                step_reward += 0.5 * prizes_taken
+            if prizes_lost > 0:
+                step_reward -= 0.2 * prizes_lost
+            if my_deck == 0 and tracker["my_deck"] > 0:
+                step_reward -= 2.0
+                
+        tracker["my_prizes"] = my_prizes
+        tracker["opp_prizes"] = opp_prizes
+        tracker["my_deck"] = my_deck
+        tracker["initialized"] = True
         try:
             import torch
             # Re-encode the state to save in buffer (detached)
             state_tensor = ensemble.encoder.encode(parsed_obs).unsqueeze(0).detach()
             dummy_log_prob = torch.tensor([0.0])
-            # Note: The replay buffer and trainer currently only support learning from the FIRST action 
-            # in a multi-select sequence. A sequence-to-sequence or auto-regressive model would be needed 
-            # to learn from the full `selections` list.
-            action = selections[0] if selections else 0
-            global_replay_buffer.push(state_tensor, action, dummy_log_prob, value)
+            
+            actions_to_push = selections if selections else [0]
+            
+            # Push the previous turn's state/actions to the buffer now that we know its reward
+            if tracker.get("last_state") is not None:
+                for a in tracker["last_actions"]:
+                    global_replay_buffer.push(
+                        tracker["last_state"],
+                        a,
+                        tracker["last_log_prob"],
+                        tracker["last_value"],
+                        step_reward=step_reward
+                    )
+                
+            # Cache the current turn's state/actions for the next turn
+            tracker["last_state"] = state_tensor
+            tracker["last_actions"] = actions_to_push
+            tracker["last_log_prob"] = dummy_log_prob
+            tracker["last_value"] = value
+
         except Exception as e:
             import traceback
             print("Error during replay buffer push:")

@@ -9,6 +9,24 @@ vendor_path = os.path.abspath(vendor_path)
 if vendor_path not in sys.path:
     sys.path.insert(0, vendor_path)
 
+AGGRO_AGENTS = [
+    "dragapult_ex_deck",
+    "mega_abomasnow_ex_deck",
+    "mega_lucario_ex_deck",
+    "mega_lucario_score_agent"
+]
+
+CONTROL_AGENTS = [
+    "battle_search_audited_alakazam_v9",
+    "battle_field_audited_alakazam_v8"
+]
+
+PROB_AGENTS = [
+    "probablity_v2",
+    "improved_probabilistic_agent",
+    "iono_s_deck"
+]
+
 def get_rules_agent(agent_name: str):
     """
     Dynamically loads and returns the 'agent' function from the specified rules-based agent module.
@@ -23,10 +41,17 @@ def get_rules_agent(agent_name: str):
     except ImportError as e:
         raise ImportError(f"Failed to load rules agent '{agent_name}': {e}")
 
-def get_available_rules_agents():
+def get_available_rules_agents(archetype: str = None):
     """
-    Returns a list of all available rules-based agents.
+    Returns a list of all available rules-based agents, optionally filtered by archetype.
     """
+    if archetype == "aggro":
+        return AGGRO_AGENTS
+    elif archetype == "control":
+        return CONTROL_AGENTS
+    elif archetype == "prob":
+        return PROB_AGENTS
+        
     agents_dir = os.path.dirname(__file__)
     files = glob.glob(os.path.join(agents_dir, "*.py"))
     agents = []

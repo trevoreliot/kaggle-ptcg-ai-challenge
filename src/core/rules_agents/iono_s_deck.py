@@ -11,7 +11,7 @@ This deck aims to load up your Pokémon with as much Energy as possible to unlea
 """
 
 # Load deck.csv in the dataset
-file_path = os.path.join("assets", "decks", "versatile", "Team_Rockets_Box.csv")
+file_path = os.path.join("assets", "decks", "rules", "iono_s_deck.csv")
 if not os.path.exists(file_path):
     file_path = "/kaggle_simulations/agent/" + file_path
 with open(file_path, "r") as file:

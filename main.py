@@ -106,15 +106,36 @@ def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None, p2_type="rl"
     if model_name:
         archetype = model_name.split("_")[0]
         if archetype in agent_module.bayesian_tracker.archetypes:
+            if archetype not in agent_module.ensemble.models:
+                # Add a reference so switch_model doesn't throw a fallback warning
+                agent_module.ensemble.models[archetype] = agent_module.ensemble.models.get("general")
             agent_module.ensemble.switch_model(archetype)
             
-    snapshot_path = os.path.join("assets", "models", "latest_snapshot.pt")
+    snapshot_path = os.path.join("assets", "models", model_name) if model_name else os.path.join("assets", "models", "latest_snapshot.pt")
     if os.path.exists(snapshot_path):
         try:
             agent_module.ensemble.active_model.load_state_dict(torch.load(snapshot_path, weights_only=True))
         except Exception:
             pass # ignore loading errors if file is being written concurrently
             
+    import random
+    
+    # Resolve 'mixed' early so we can assign the correct deck
+    if p2_type == "mixed":
+        p2_type = "rl" if random.random() < 0.8 else "rules"
+        
+    if p2_type == "rules":
+        from src.core.rules_agents import get_available_rules_agents
+        p2_actual_name = p2_agent_name
+        if not p2_actual_name or p2_actual_name == "all":
+            p2_actual_name = random.choice(get_available_rules_agents())
+        elif p2_actual_name in ["aggro", "control", "prob"]:
+            p2_actual_name = random.choice(get_available_rules_agents(p2_actual_name))
+        
+        p2_agent_name = p2_actual_name
+        # Override the deck with the specific rule agent's deck!
+        p2_deck_path = os.path.join("assets", "decks", "rules", f"{p2_actual_name}.csv")
+
     p1_deck = load_deck(p1_deck_path)
     p2_deck = load_deck(p2_deck_path)
     
@@ -140,24 +161,13 @@ def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None, p2_type="rl"
             p1_func = agent_module.agent
             p2_func = agent_module.agent
             
-            if p2_type == "mixed":
-                p2_type = "rl" if random.random() < 0.8 else "rules"
-            
-            p2_actual_name = p2_agent_name
             if p2_type == "rules":
-                from src.core.rules_agents import get_available_rules_agents
                 from src.core.rules_agents import get_rules_agent
-                if not p2_actual_name or p2_actual_name == "all":
-                    p2_actual_name = random.choice(get_available_rules_agents())
-                p2_func = get_rules_agent(p2_actual_name)
+                p2_func = get_rules_agent(p2_agent_name)
             else:
-                def p2_rl_wrapper(obs):
-                    agent_module.global_replay_buffer = None
-                    action = agent_module.agent(obs)
-                    agent_module.global_replay_buffer = local_buffer
-                    return action
-                p2_func = p2_rl_wrapper
+                p2_func = agent_module.agent
             
+            agent_module.reset_state_tracking()
             env.reset()
             env.run([p1_func, p2_func])
         finally:
@@ -175,6 +185,19 @@ def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None, p2_type="rl"
         pass
     
     reward = env.state[0].reward if env.state[0].reward is not None else 0.0
+    
+    # Push the final dangling action from Player 1's state tracker
+    tracker = agent_module._state_tracker[0]
+    if tracker.get("last_state") is not None:
+        for a in tracker["last_actions"]:
+            local_buffer.push(
+                tracker["last_state"],
+                a,
+                tracker["last_log_prob"],
+                tracker["last_value"],
+                step_reward=0.0
+            )
+        
     trajectory = local_buffer.finalize_episode(reward)
     
     # Calculate episode length (rough estimate by actions or step count)
@@ -205,7 +228,7 @@ def main():
     parser.add_argument("--p2-type", type=str, choices=["rl", "rules", "mixed"], default="rl",
                         help="The type of agent Player 2 is.")
     parser.add_argument("--p2-agent", type=str, default="all",
-                        help="The specific rules-based agent to use if --p2-type is rules (or 'all' for random).")
+                        help="The specific rules-based agent to use if --p2-type is rules (or 'all', 'aggro', 'control', 'prob' for archetype).")
     parser.add_argument("--debug", action="store_true",
                         help="Enable cProfile worker profiling.")
     args = parser.parse_args()
@@ -220,8 +243,21 @@ def main():
         if not opp_decks:
             print("No opponent decks found.")
             return
+            
         p2_deck_path = random.choice(opp_decks)
         
+        p2_agent_name = args.p2_agent
+        if args.p2_type == "rules":
+            from src.core.rules_agents import get_available_rules_agents
+            if args.p2_agent == "all" or not args.p2_agent:
+                p2_agent_name = random.choice(get_available_rules_agents())
+                print(f"Randomly selected rules agent: {p2_agent_name}")
+            elif args.p2_agent in ["aggro", "control", "prob"]:
+                p2_agent_name = random.choice(get_available_rules_agents(args.p2_agent))
+                print(f"Randomly selected rules agent from archetype {args.p2_agent}: {p2_agent_name}")
+                
+            p2_deck_path = os.path.join("assets", "decks", "rules", f"{p2_agent_name}.csv")
+            
         try:
             p1_deck = load_deck(args.p1_deck)
             p2_deck = load_deck(p2_deck_path)
@@ -235,12 +271,6 @@ def main():
         
         p1_func = agent_module.agent
         p2_func = agent_module.agent
-        
-        p2_agent_name = args.p2_agent
-        if args.p2_type == "rules" and (args.p2_agent == "all" or not args.p2_agent):
-            from src.core.rules_agents import get_available_rules_agents
-            p2_agent_name = random.choice(get_available_rules_agents())
-            print(f"Randomly selected rules agent: {p2_agent_name}")
         
         if args.p2_type == "rules":
             from src.core.rules_agents import get_rules_agent
@@ -292,6 +322,8 @@ def main():
                 from src.core.rules_agents import get_available_rules_agents
                 if args.p2_agent == "all" or not args.p2_agent:
                     available_p2_agents = get_available_rules_agents()
+                elif args.p2_agent in ["aggro", "control", "prob"]:
+                    available_p2_agents = get_available_rules_agents(args.p2_agent)
                 else:
                     available_p2_agents = [args.p2_agent]
             else:
@@ -306,7 +338,7 @@ def main():
                 
             completed = 0
             
-            snapshot_path = os.path.join("assets", "models", "latest_snapshot.pt")
+            snapshot_path = os.path.join("assets", "models", args.model_name) if args.model_name else os.path.join("assets", "models", "latest_snapshot.pt")
             torch.save(agent_module.ensemble.active_model.state_dict(), snapshot_path)
             
             from tqdm import tqdm
