@@ -1,0 +1,8 @@
+{
+  "r_prize_taken": 0.5,
+  "r_prize_lost": -0.2,
+  "r_deck_out": -2.0,
+  "r_energy_attach": 0.05,
+  "r_evolution": 0.10,
+  "r_damage_dealt_per_10": 0.01
+}

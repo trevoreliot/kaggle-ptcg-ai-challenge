@@ -5,8 +5,8 @@ import datetime
 import argparse
 
 def bundle_submission(sims: int = 50):
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M")
-    output_dir = os.path.join("submissions", "draft", timestamp)
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    output_dir = os.path.join("submissions", "draft", f"{timestamp}_{sims}sims")
     os.makedirs(output_dir, exist_ok=True)
     
     tar_path = os.path.join(output_dir, "submission.tar.gz")

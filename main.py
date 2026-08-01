@@ -63,14 +63,14 @@ def get_available_decks(opp_deck_arg: str) -> list[str]:
 
 def worker_wrapper(args):
     import os
-    p1, p2, model_name, debug, p2_type, p2_agent = args
+    p1, p2, model_name, debug, p2_type, p2_agent, epsilon, temperature = args
     if debug:
         import cProfile
         pr = cProfile.Profile()
         pr.enable()
         
     try:
-        res = worker_run_episode(p1, p2, model_name, p2_type, p2_agent)
+        res = worker_run_episode(p1, p2, model_name, p2_type, p2_agent, epsilon, temperature)
         if debug:
             pr.disable()
             out_dir = os.path.join("logs", "debug", "worker_profiles")
@@ -83,7 +83,7 @@ def worker_wrapper(args):
         print(f"Worker exception: {e}")
         return None
 
-def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None, p2_type="rl", p2_agent_name=None):
+def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None, p2_type="rl", p2_agent_name=None, epsilon=0.01, temperature=1.0):
     import sys
     import os
     
@@ -100,6 +100,9 @@ def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None, p2_type="rl"
     # Import locally AFTER setting CUDA_VISIBLE_DEVICES to ensure each process has its own isolated CPU agent state
     import src.core.agent as agent_module
     from src.core.models.replay_buffer import ReplayBuffer
+    
+    agent_module.CURRENT_EPSILON = epsilon
+    agent_module.CURRENT_TEMPERATURE = temperature
     
     # Lock model for training
     agent_module.IS_TRAINING = True
@@ -341,9 +344,16 @@ def main():
             # Prepare tasks
             tasks = []
             for i in range(args.episodes):
+                progress = i / max(1, args.episodes - 1)
+                
+                # Decay epsilon from 0.15 down to 0.01
+                epsilon = 0.15 - (0.14 * progress)
+                # Decay temperature from 2.0 down to 0.5
+                temperature = 2.0 - (1.5 * progress)
+                
                 p2_deck_path = random.choice(opp_decks)
                 p2_agent_choice = random.choice(available_p2_agents)
-                tasks.append((args.p1_deck, p2_deck_path, args.model_name, args.debug, args.p2_type, p2_agent_choice))
+                tasks.append((args.p1_deck, p2_deck_path, args.model_name, args.debug, args.p2_type, p2_agent_choice, epsilon, temperature))
                 
             completed = 0
             

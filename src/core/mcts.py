@@ -59,7 +59,7 @@ class MCTSEngine:
         self.num_simulations = num_simulations
         self.c_puct = c_puct
         
-    def search(self, obs_dict: dict, agent_deck: list, opponent_deck_pred: list) -> List[int]:
+    def search(self, obs_dict: dict, agent_deck: list, opponent_deck_pred: list, is_training: bool = False, temperature: float = 1.0) -> List[int]:
         if cg_api is None:
             return []
             
@@ -155,11 +155,24 @@ class MCTSEngine:
                     curr.value += value if root_player == leaf_player else -value
                 curr = curr.parent
                 
-        # Return most visited action
+        # Return action based on training mode
         best_action_idx = -1
         if root.children:
-            best_child = max(root.children, key=lambda c: c.visits)
-            best_action_idx = best_child.action
+            if is_training:
+                # Sample proportionally to visits with temperature
+                import numpy as np
+                visits = np.array([c.visits for c in root.children], dtype=np.float32)
+                
+                if temperature != 1.0 and temperature > 0:
+                    visits = visits ** (1.0 / temperature)
+                    
+                probs = visits / visits.sum()
+                best_child = np.random.choice(root.children, p=probs)
+                best_action_idx = best_child.action
+            else:
+                # Greedy most visited
+                best_child = max(root.children, key=lambda c: c.visits)
+                best_action_idx = best_child.action
         elif root.untried_actions:
             best_action_idx = root.untried_actions[0]
             

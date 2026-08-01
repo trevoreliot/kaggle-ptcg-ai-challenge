@@ -1,5 +1,6 @@
 import random
 import os
+import json
 from src.core.parser import parse_observation
 from src.core.models.ensemble import EnsembleManager
 from src.core.bayesian import BayesianTracker
@@ -29,6 +30,24 @@ evaluation_telemetry = {
 # Cache for loaded decks to prevent extreme disk I/O in worker processes
 _opp_deck_cache = {}
 
+# Load external reward shaping configuration
+# Defaults
+REWARD_CONFIG = {
+    "r_prize_taken": 0.5,
+    "r_prize_lost": -0.2,
+    "r_deck_out": -2.0,
+    "r_energy_attach": 0.05,
+    "r_evolution": 0.10,
+    "r_damage_dealt_per_10": 0.01
+}
+try:
+    _reward_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "assets", "reward", "reward_shaping.json"))
+    if os.path.exists(_reward_path):
+        with open(_reward_path, "r") as _f:
+            REWARD_CONFIG.update(json.load(_f))
+except Exception as e:
+    print(f"Warning: Could not load reward_shaping.json. Using defaults. ({e})")
+
 # State tracking for dense intermediate rewards during training
 _state_tracker = {}
 for _p in [0, 1]:
@@ -37,6 +56,9 @@ for _p in [0, 1]:
         "my_prizes": 6,
         "opp_prizes": 6,
         "my_deck": 60,
+        "my_energies": 0,
+        "my_evolutions": 0,
+        "opp_damage": 0,
         "last_state": None,
         "last_actions": None,
         "last_log_prob": None,
@@ -156,13 +178,16 @@ def agent(obs_dict: dict) -> list[int]:
             opponent_deck_pred = [5] * 60
         _opp_deck_cache[best_archetype] = opponent_deck_pred
 
+    temperature = globals().get("CURRENT_TEMPERATURE", 1.0)
+    
     # Execute Search
-    selections = mcts.search(obs_dict, agent_deck, opponent_deck_pred)
+    selections = mcts.search(obs_dict, agent_deck, opponent_deck_pred, is_training=IS_TRAINING, temperature=temperature)
     
     # Fallback to policy sampling if MCTS failed
     if not selections:
         options = parsed_obs.select.option
         max_count = min(parsed_obs.select.maxCount, len(options))
+        min_count = parsed_obs.select.minCount
         if max_count == 0:
             if IS_EVALUATING:
                 evaluation_telemetry["action_paralysis"] += 1
@@ -170,18 +195,27 @@ def agent(obs_dict: dict) -> list[int]:
         valid_logits = np.array(policy_logits[:len(options)])
         
         if IS_TRAINING:
-            exp_logits = np.exp(valid_logits - np.max(valid_logits))
-            valid_probs = exp_logits / exp_logits.sum()
+            epsilon = globals().get("CURRENT_EPSILON", 0.01)
+            
+            # Epsilon-greedy check
+            if random.random() < epsilon:
+                valid_probs = np.ones(len(options)) / len(options)
+            else:
+                scaled_logits = valid_logits / temperature
+                exp_logits = np.exp(scaled_logits - np.max(scaled_logits))
+                valid_probs = exp_logits / exp_logits.sum()
+                
             try:
-                sampled_actions = np.random.choice(len(options), size=max_count, replace=False, p=valid_probs)
+                target_size = max(1, min_count)
+                sampled_actions = np.random.choice(len(options), size=target_size, replace=False, p=valid_probs)
                 selections = sampled_actions.tolist()
             except ValueError:
-                # Fallback if probability array has issues (e.g. fewer non-zero probs than max_count)
+                # Fallback if probability array has issues (e.g. fewer non-zero probs than target_size)
                 action = np.random.choice(len(options), p=valid_probs)
                 selections = [action]
-                if max_count > 1:
+                if min_count > 1:
                     others = [x for x in range(len(options)) if x != action]
-                    selections.extend(random.sample(others, min(max_count - 1, len(others))))
+                    selections.extend(random.sample(others, min(min_count - 1, len(others))))
         else:
             # Greedy decoding for evaluation/inference
             best_indices = np.argsort(valid_logits)[::-1]
@@ -199,6 +233,20 @@ def agent(obs_dict: dict) -> list[int]:
         opp_prizes = len([p for p in opp_player.prize if p is not None])
         my_deck = my_player.deckCount
         
+        my_all_poke = []
+        if my_player.active: my_all_poke.extend(my_player.active)
+        if my_player.bench: my_all_poke.extend(my_player.bench)
+        my_all_poke = [p for p in my_all_poke if p is not None]
+            
+        opp_all_poke = []
+        if opp_player.active: opp_all_poke.extend(opp_player.active)
+        if opp_player.bench: opp_all_poke.extend(opp_player.bench)
+        opp_all_poke = [p for p in opp_all_poke if p is not None]
+        
+        current_energies = sum(len(p.energyCards) for p in my_all_poke)
+        current_evolutions = sum(len(p.preEvolution) for p in my_all_poke)
+        current_opp_damage = sum((p.maxHp - p.hp) for p in opp_all_poke)
+        
         tracker = _state_tracker[me_idx]
         
         # Calculate deltas if state is initialized
@@ -206,16 +254,34 @@ def agent(obs_dict: dict) -> list[int]:
             prizes_taken = tracker["opp_prizes"] - opp_prizes
             prizes_lost = tracker["my_prizes"] - my_prizes
             
+            # 1. Prize conditions
             if prizes_taken > 0:
-                step_reward += 0.5 * prizes_taken
+                step_reward += REWARD_CONFIG["r_prize_taken"] * prizes_taken
             if prizes_lost > 0:
-                step_reward -= 0.2 * prizes_lost
+                step_reward += REWARD_CONFIG["r_prize_lost"] * prizes_lost
             if my_deck == 0 and tracker["my_deck"] > 0:
-                step_reward -= 2.0
+                step_reward += REWARD_CONFIG["r_deck_out"]
+                
+            # 2. Dense Setup Rewards
+            energy_delta = current_energies - tracker["my_energies"]
+            if energy_delta > 0:
+                step_reward += REWARD_CONFIG["r_energy_attach"] * energy_delta
+                
+            evo_delta = current_evolutions - tracker["my_evolutions"]
+            if evo_delta > 0:
+                step_reward += REWARD_CONFIG["r_evolution"] * evo_delta
+                
+            # 3. Dense Attack Rewards
+            damage_delta = current_opp_damage - tracker["opp_damage"]
+            if damage_delta > 0:
+                step_reward += REWARD_CONFIG["r_damage_dealt_per_10"] * (damage_delta / 10.0)
                 
         tracker["my_prizes"] = my_prizes
         tracker["opp_prizes"] = opp_prizes
         tracker["my_deck"] = my_deck
+        tracker["my_energies"] = current_energies
+        tracker["my_evolutions"] = current_evolutions
+        tracker["opp_damage"] = current_opp_damage
         tracker["initialized"] = True
         try:
             import torch
