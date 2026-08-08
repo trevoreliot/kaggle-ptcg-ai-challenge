@@ -171,10 +171,6 @@ def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None, p2_type="rl"
                 p2_func = get_rules_agent(p2_agent_name)
             else:
                 p2_func = agent_module.agent
-            
-            agent_module.CURRENT_EPSILON = epsilon
-            agent_module.CURRENT_TEMPERATURE = temperature
-            
             agent_module.reset_state_tracking()
             env.reset()
             env.run([p1_func, p2_func])
@@ -349,16 +345,9 @@ def main():
             # Prepare tasks
             tasks = []
             for i in range(args.episodes):
-                progress = i / max(1, args.episodes - 1)
-                
-                # Decay epsilon from 0.15 down to 0.01
-                epsilon = 0.15 - (0.14 * progress)
-                # Decay temperature from 2.0 down to 0.5
-                temperature = 2.0 - (1.5 * progress)
-                
                 p2_deck_path = random.choice(opp_decks)
                 p2_agent_choice = random.choice(available_p2_agents)
-                tasks.append((args.p1_deck, p2_deck_path, args.model_name, args.debug, args.p2_type, p2_agent_choice, epsilon, temperature))
+                tasks.append((args.p1_deck, p2_deck_path, args.model_name, args.debug, args.p2_type, p2_agent_choice, 0.01, 1.0))
                 
             completed = 0
             

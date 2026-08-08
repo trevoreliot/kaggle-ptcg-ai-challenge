@@ -80,6 +80,9 @@ Inside each Worker (env.run):
 - **Bayesian Tuning**: 
   - Retrained the likelihood matrix (`assets/prob/likelihood_matrix.npy`) to directly parse the actual validation deck CSVs (Aggro, Control, Combo), guaranteeing that the unique Card IDs perfectly correspond to the archetypes for flawless 100% confidence hot-swapping.
   - Adjusted training decks to include necessary Basic and Stage 1 Pokémon to comply with core PTCG rules and prevent simulation crashes (infinite mulligans).
+- **Reward Shaping & Exploration**:
+  - Implemented configurable dense rewards via `assets/reward/reward_shaping.json` to incentivize playing Trainer and Stadium cards.
+  - Added sophisticated state tracking to reward multi-turn combos (e.g., executing a Boss's Orders active-bench swap for an immediate KO).
 
 ### Directory Structure
 - `src/core/`: Contains the core agent logic, state parsers, and machine learning models.
@@ -98,6 +101,7 @@ Inside each Worker (env.run):
   - `prob/`: Contains the generated `likelihood_matrix.npy`.
   - `models/`: Checkpoints and `.onnx` models.
   - `decks/`: Valid PTCG deck compositions separated by archetype.
+  - `reward/`: Contains `reward_shaping.json` to dynamically tune dense RL reward weights.
 - `scripts/`: Development scripts.
   - `build_likelihood_matrix.py`: Retrains the Bayesian probability matrix.
   - `export_onnx.py`: Compiles PyTorch weights into optimized CPU `.onnx` formats.
@@ -137,9 +141,9 @@ uv run python main.py --mode train --opp-deck all --workers 16 --episodes 100000
 uv run streamlit run src/viz/rl_training_dashboard.py
 ```
 
-**4. Train against Rules-Based Agents (Mixed Strategies):**
+**4. Train against Specific Rules-Based Agent (with custom MCTS Sims):**
 ```bash
-uv run python main.py --mode train --episodes 10000 --workers 16 --p2-type rules --p2-agent all
+MCTS_SIMS=200 uv run python main.py --mode train --episodes 50000 --workers 14 --p2-type rules --p2-agent battle_field_audited_alakazam_v8
 ```
 
 **5. Evaluate Model Diagnostics:**
