@@ -1,0 +1,82 @@
+#+TITLE: Architectural Refactor: Asynchronous Batched Actor-Learner MCTS
+#+AUTHOR: Trevor Eliot
+#+DATE: [2026-08-08]
+#+PROPERTY: header-args :eval no
+
+* Overview & Executive Summary
+The goal of this refactor branch is to transition our Kaggle Pokémon TCG AI Battle agent from a **monolithic sequential MCTS loop** to a **decoupled, multi-process local actor-learner architecture**.
+
+**Core Objective:** Maximize GPU utilization on our local single-node hardware (NVIDIA RTX 5080 16GB + AMD Ryzen 9 9850X3D) by converting individual single-sample MCTS neural network calls into a centralized, dynamic dynamic-batching GPU server.
+
+* Target Hardware Environment Constraints
+- **GPU:** Single NVIDIA RTX 5080 (16 GB VRAM).
+- **CPU:** AMD Ryzen 9 9850X3D (8 cores / 16 threads).
+- **Memory Bounds:** Keep batch inference and backprop allocations strictly strictly under 14.5 GB VRAM to prevent OOM panics.
+- **IPC Target:** Minimize CPU serialization bottlenecks when passing game states between worker processes.
+
+* Target Architectural Topology
+
+#+BEGIN_EXAMPLE
+ [ CPU Actor Process 1 ] ──┐
+ [ CPU Actor Process 2 ] ──┼──> [ Shared IPC Input Queue ] ──> [ GPU Batch Server ]
+ [ CPU Actor Process N ] ──┘                                          │
+       ▲                                                              │ Vectorized PyTorch Forward
+       └────────────── [ Shared IPC Output Pipes ] <──────────────────┘ (Batch 32-64)
+#+END_EXAMPLE
+
+* Structural Requirements & Tasks
+
+** TODO Phase 1: Isolated GPU Batched Inference Server
+- [ ] Implement `BatchedInferenceServer` as a standalone process using ~torch.multiprocessing~.
+- [ ] Create a thread-safe / process-safe input queue (~mp.Queue~) accepting request payloads containing ~(request_id, state_tensor)~.
+- [ ] Implement continuous adaptive batching:
+  - Collect requests until ~batch_size == 64~ OR ~timeout_ms == 2.0~ is reached.
+  - Execute single vectorized forward pass on the RTX 5080.
+  - Dispatch output policy ~P(s,a)~ and value ~V(s)~ tensors back via dedicated per-actor output pipes (~mp.Pipe~).
+- [ ] Add explicit shutdown signals and queue drain procedures.
+
+** TODO Phase 2: Refactor MCTS Leaf Evaluation Interface
+- [ ] Decouple ~MCTSNode.expand()~ from direct model forward passes.
+- [ ] Replace local PyTorch calls inside MCTS search steps with non-blocking yield/await calls to the ~BatchedInferenceServer~ IPC pipe.
+- [ ] Preserve search logic (Bayesian strategy toggling, upper confidence bounds on trees) while offloading tensor evaluation.
+
+** TODO Phase 3: Parallel CPU Worker Pool Orchestration
+- [ ] Build an actor worker manager spawning ~8 to 12~ worker processes on the Ryzen 9850X3D.
+- [ ] Pass lightweight state keys / compact byte representations across process boundaries to keep CPU serialization overhead low.
+- [ ] Implement robust error handling (actor timeouts, automatic process restart, queue flushing on actor death).
+
+** TODO Phase 4: Shared Memory Replay Buffer & Learner Thread
+- [ ] Allocate a lock-free or low-contention replay buffer using shared memory tensors (~torch.multiprocessing.Array~ or ~SharedMemory~).
+- [ ] Create an asynchronous background ~LearnerProcess~ pulling batches from replay storage for model backpropagation without pausing actor searches.
+
+* Technical Guarantees & Constraints for Gemini 3.1 Pro
+
+** Strict Architectural Constraints
+1. **No External Distributed Frameworks:** Do NOT introduce Heavy distributed dependencies like Kubernetes, Ray Cluster, or Redis unless explicitly requested. Leverage Python standard library ~multiprocessing~ or ~torch.multiprocessing~.
+2. **Deterministic Timeouts:** Every IPC queue collect MUST specify an explicit ~timeout~ parameter to eliminate deadlocks when an actor fails.
+3. **In-Place Memory Operations:** Reuse pre-allocated CUDA tensors on the batch server for batched inputs to prevent memory churn on the RTX 5080.
+
+** Non-Goals for this Refactor
+- Do NOT alter game rules, environment wrappers, or action space encoding.
+- Do NOT change the underlying model head topology (DINOv2 backbone wrapper logic stays untouched).
+- Do NOT attempt multi-node cloud orchestration.
+
+* Verification & Benchmarking Criteria
+To consider this refactor successful, the implementation must meet these metrics:
+1. **GPU Utilization:** Measured via ~nvidia-smi~ / PyTorch profiler—must sustain **> 70% GPU Compute Utilization** during MCTS searches (up from ~15%).
+2. **Throughput:** Total state evaluations per second must increase by at least ~3.5x~ compared to the sequential baseline.
+3. **VRAM Stability:** Peak memory consumption must remain below **14.5 GB** during continuous 10-minute rollout tests.
+
+* File Structure Changes
+#+BEGIN_SRC text
+src/
+├── agent/
+│   ├── mcts.py              <-- Refactor: replace direct inference with IPC client call
+│   └── strategy.py
+├── engine/
+│   ├── batch_server.py     <-- NEW: Dedicated GPU IPC Inference Engine
+│   ├── ipc_protocol.py     <-- NEW: Lightweight binary message schemas for queues
+│   └── worker_pool.py      <-- NEW: CPU Multi-process orchestration logic
+└── models/
+    └── evaluator.py        <-- Refactor: vectorize single-sample forwards into batched tensors
+#+END_SRC

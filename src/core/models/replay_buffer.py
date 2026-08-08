@@ -13,7 +13,7 @@ class ReplayBuffer:
             "state": state.detach().cpu().numpy(),
             "action": action,
             "log_prob": log_prob.detach().cpu().numpy(),
-            "value": value,
+            "value": float(value),
             "step_reward": step_reward
         })
         

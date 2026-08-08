@@ -50,7 +50,10 @@ class EnsembleManager:
         
         if TORCH_AVAILABLE:
             if device is None:
-                self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                if os.environ.get("KAGGLE_AGENT_CPU_ONLY") == "1":
+                    self.device = torch.device("cpu")
+                else:
+                    self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             else:
                 self.device = torch.device(device)
             self.active_model = BaseNetwork().to(self.device)
