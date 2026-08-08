@@ -1,8 +1,15 @@
 {
-  "r_prize_taken": 0.5,
-  "r_prize_lost": -0.2,
+  "r_prize_taken": 1.5,
+  "r_prize_lost": -0.15,
   "r_deck_out": -2.0,
-  "r_energy_attach": 0.05,
-  "r_evolution": 0.10,
-  "r_damage_dealt_per_10": 0.01
+  "r_energy_attach": 0.02,
+  "r_evolution": 0.05,
+  "r_damage_dealt_per_10": 0.15,
+  "r_retreat": 0.01,
+  "r_healing_per_10": 0.01,
+  "r_prize_lost_fezandipiti_penalty": -0.5,
+  "r_ursulana_attack_bonus_per_prize": 0.02,
+  "r_play_trainer": 0.05,
+  "r_boss_ko_bonus": 0.5,
+  "r_play_stadium": 0.05
 }

@@ -80,7 +80,9 @@ def worker_wrapper(args):
     except KeyboardInterrupt:
         return None
     except Exception as e:
+        import traceback
         print(f"Worker exception: {e}")
+        traceback.print_exc()
         return None
 
 def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None, p2_type="rl", p2_agent_name=None, epsilon=0.01, temperature=1.0):
@@ -169,6 +171,9 @@ def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None, p2_type="rl"
                 p2_func = get_rules_agent(p2_agent_name)
             else:
                 p2_func = agent_module.agent
+            
+            agent_module.CURRENT_EPSILON = epsilon
+            agent_module.CURRENT_TEMPERATURE = temperature
             
             agent_module.reset_state_tracking()
             env.reset()

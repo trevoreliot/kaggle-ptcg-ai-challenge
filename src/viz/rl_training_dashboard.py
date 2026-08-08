@@ -65,8 +65,10 @@ with tab_overview:
     recent_winrate = (recent_df["Reward"] == 1).mean() * 100 if not recent_df.empty else 0.0
     recent_avg_len = recent_df["Episode_Length"].mean() if not recent_df.empty else 0.0
     
-    latest_policy_loss = df["Policy_Loss"].iloc[-1] if not df.empty else 0
-    latest_value_loss = df["Value_Loss"].iloc[-1] if not df.empty else 0
+    non_zero_policy = df[df["Policy_Loss"] != 0.0]
+    non_zero_value = df[df["Value_Loss"] != 0.0]
+    latest_policy_loss = non_zero_policy["Policy_Loss"].iloc[-1] if not non_zero_policy.empty else 0
+    latest_value_loss = non_zero_value["Value_Loss"].iloc[-1] if not non_zero_value.empty else 0
     
     col1.metric("Total Matches (Filtered)", f"{total_episodes:,}")
     col2.metric("Global Win Rate", f"{global_winrate:.1f}%")
@@ -120,7 +122,8 @@ with tab_overview:
             sampled_df, 
             x=sampled_df.index, 
             y="Rolling_Win_Rate",
-            title=f"Rolling Win Rate (%) [Window={rolling_window} matches]"
+            title=f"Rolling Win Rate (%) [Window={rolling_window} matches]",
+            render_mode="svg"
         )
         fig_trend.update_layout(yaxis_range=[0, 100], xaxis_title="Total Matches Played")
         st.plotly_chart(fig_trend, width='stretch')
@@ -146,7 +149,8 @@ with tab_overview:
                 sampled_policy_df,
                 x=sampled_policy_df.index,
                 y=["Policy_Loss", "Smooth_Loss"],
-                title="Policy Loss over Time"
+                title="Policy Loss over Time",
+                render_mode="svg"
             )
             fig_policy.update_layout(xaxis_title="Total Matches Played")
             st.plotly_chart(fig_policy, width='stretch')
@@ -166,7 +170,8 @@ with tab_overview:
                 sampled_value_df,
                 x=sampled_value_df.index,
                 y=["Value_Loss", "Smooth_Loss"],
-                title="Value Loss over Time"
+                title="Value Loss over Time",
+                render_mode="svg"
             )
             fig_value.update_layout(xaxis_title="Total Matches Played")
             st.plotly_chart(fig_value, width='stretch')
