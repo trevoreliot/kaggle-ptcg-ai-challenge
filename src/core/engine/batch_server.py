@@ -1,6 +1,7 @@
 import torch
 import torch.multiprocessing as mp
 import time
+import os
 import queue
 from typing import Dict, Any
 from src.core.engine.ipc_protocol import InferenceRequest, InferenceResponse
@@ -20,6 +21,9 @@ class BatchedInferenceServer(mp.Process):
         self.batch_size = batch_size
         self.timeout_s = timeout_ms / 1000.0
         self.running = mp.Event()
+        self.snapshot_path = os.path.join("assets", "models", "latest_snapshot.pt")
+        self.last_mtime = 0.0
+        self.last_check_time = time.time()
 
     def run(self):
         self.running.set()
@@ -49,7 +53,25 @@ class BatchedInferenceServer(mp.Process):
         # 6160 is the feature_size defined in StateEncoder
         batched_tensor = torch.zeros((self.batch_size, 6160), device=device, dtype=torch.float32)
         
+        # Initialize mtime if snapshot exists
+        if os.path.exists(self.snapshot_path):
+            self.last_mtime = os.path.getmtime(self.snapshot_path)
+            
         while self.running.is_set():
+            # Periodically check for new weights from the Learner
+            current_time = time.time()
+            if current_time - self.last_check_time > 5.0:  # Check every 5 seconds
+                self.last_check_time = current_time
+                if os.path.exists(self.snapshot_path):
+                    mtime = os.path.getmtime(self.snapshot_path)
+                    if mtime > self.last_mtime:
+                        self.last_mtime = mtime
+                        try:
+                            # Load strictly to device to avoid RAM spikes
+                            self.model.load_state_dict(torch.load(self.snapshot_path, map_location=device, weights_only=True))
+                        except Exception as e:
+                            print(f"[BatchServer] Failed to hot-reload weights: {e}")
+                            
             batch_reqs = []
             try:
                 # Block until we get at least one request

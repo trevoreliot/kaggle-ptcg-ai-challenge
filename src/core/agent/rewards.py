@@ -62,7 +62,9 @@ def calculate_step_reward(parsed_obs, tracker):
         if prizes_taken > 0:
             step_reward += REWARD_CONFIG["r_prize_taken"] * prizes_taken
             if tracker.get("boss_played_turn") == parsed_obs.current.turn:
-                step_reward += REWARD_CONFIG.get("r_boss_ko_bonus", 0.5) * prizes_taken
+                bonus = REWARD_CONFIG.get("r_boss_ko_bonus", 0.5) * prizes_taken
+                print(f"\n[REWARD] 🎯 BOSS'S ORDERS KO BONUS GRANTED! (+{bonus:.2f}) 🎯\n")
+                step_reward += bonus
         if prizes_lost > 0:
             step_reward += REWARD_CONFIG["r_prize_lost"] * prizes_lost
             if tracker.get("had_fezandipiti", False) and not has_fezandipiti:
@@ -112,7 +114,10 @@ def calculate_step_reward(parsed_obs, tracker):
         if damage_delta > 0:
             base_dmg_reward = REWARD_CONFIG["r_damage_dealt_per_10"] * (damage_delta / 10.0)
             if has_ursulana and my_player.active and my_player.active[0] is not None and my_player.active[0].id == 44:
-                base_dmg_reward += REWARD_CONFIG.get("r_ursulana_attack_bonus_per_prize", 0.02) * (6 - opp_prizes)
+                bonus = REWARD_CONFIG.get("r_ursulana_attack_bonus_per_prize", 0.02) * (6 - opp_prizes)
+                if bonus > 0:
+                    print(f"\n[REWARD] 🐻 URSALUNA BLOODMOON ATTACK BONUS GRANTED! (+{bonus:.2f}) 🐻\n")
+                base_dmg_reward += bonus
             step_reward += base_dmg_reward
             
     tracker["my_prizes"] = my_prizes

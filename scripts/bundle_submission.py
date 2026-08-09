@@ -40,7 +40,7 @@ def bundle_submission(sims: int = 50):
                     continue
                 if os.path.isdir(target):
                     for root, dirs, files in os.walk(target):
-                        if "__pycache__" in root:
+                        if "__pycache__" in root or "/bak" in root or "\\bak" in root or root.endswith("bak"):
                             continue
                         for file in files:
                             if file.endswith(".pt") or file.endswith(".pyc") or file.endswith(".pdf"):

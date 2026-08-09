@@ -21,6 +21,8 @@ def main():
                         help="The specific rules-based agent to use if --p2-type is rules (or 'all', 'aggro', 'control', 'prob' for archetype).")
     parser.add_argument("--debug", action="store_true",
                         help="Enable cProfile worker profiling.")
+    parser.add_argument("--epsilon", type=float, default=None,
+                        help="Starting epsilon for exploration decay.")
     args = parser.parse_args()
     
     if args.p2_type in ["rl", "mixed"] and args.p2_agent != "all":
@@ -31,7 +33,7 @@ def main():
         run_play(args.p1_deck, args.opp_deck, args.p2_type, args.p2_agent)
     elif args.mode == "train":
         from src.core.engine.train import run_train
-        run_train(args.episodes, args.workers, args.p1_deck, args.opp_deck, args.model_name, args.p2_type, args.p2_agent, args.debug)
+        run_train(args.episodes, args.workers, args.p1_deck, args.opp_deck, args.model_name, args.p2_type, args.p2_agent, args.debug, args.epsilon)
     elif args.mode == "evaluate":
         from src.core.engine.evaluate import run_evaluate
         run_evaluate(args.episodes, args.p1_deck, args.opp_deck, args.model_name, args.p2_type, args.p2_agent)

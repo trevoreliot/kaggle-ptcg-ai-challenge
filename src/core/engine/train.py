@@ -10,6 +10,7 @@ from kaggle_environments import make
 import src.core.agent.agent as agent_module # We will move agent.py to src/core/agent/agent.py soon
 from src.core.models.replay_buffer import ReplayBuffer
 from src.core.models.trainer import Trainer
+from src.core.engine.learner import LearnerProcess
 from src.core.utils.utils import load_deck, get_available_decks
 
 def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None, p2_type="rl", p2_agent_name=None, epsilon=0.01, temperature=1.0):
@@ -193,11 +194,13 @@ def worker_wrapper(args):
         traceback.print_exc()
         return None
 
-def run_train(episodes, workers, p1_deck_arg, opp_deck_arg, model_name, p2_type, p2_agent_arg, debug_arg):
+def run_train(episodes, workers, p1_deck_path, p2_deck_path, model_name, p2_type, p2_agent, debug=False, start_epsilon=None):
+    if not os.path.exists("assets/models"):
+        os.makedirs("assets/models")
     print(f"Running {episodes} matches in 'train' mode with {workers} workers...")
-    opp_decks = get_available_decks(opp_deck_arg)
+    opp_decks = get_available_decks(p2_deck_path)
     if not opp_decks:
-        print(f"No decks found for filter: {opp_deck_arg}")
+        print(f"No decks found for filter: {p2_deck_path}")
         return
         
     master_buffer = ReplayBuffer(gamma=0.99)
@@ -223,20 +226,14 @@ def run_train(episodes, workers, p1_deck_arg, opp_deck_arg, model_name, p2_type,
         
         if p2_type == "rules":
             from src.core.rules_agents import get_available_rules_agents
-            if p2_agent_arg == "all" or not p2_agent_arg:
+            if p2_agent == "all" or not p2_agent:
                 available_p2_agents = get_available_rules_agents()
-            elif p2_agent_arg in ["aggro", "control", "prob"]:
-                available_p2_agents = get_available_rules_agents(p2_agent_arg)
+            elif p2_agent in ["aggro", "control", "prob"]:
+                available_p2_agents = get_available_rules_agents(p2_agent)
             else:
-                available_p2_agents = [p2_agent_arg]
+                available_p2_agents = [p2_agent]
         else:
             available_p2_agents = [None]
-            
-        tasks = []
-        for i in range(episodes):
-            p2_deck_path = random.choice(opp_decks)
-            p2_agent_choice = random.choice(available_p2_agents) if available_p2_agents[0] else None
-            tasks.append((p1_deck_arg, p2_deck_path, model_name, debug_arg, p2_type, p2_agent_choice, 0.01, 1.0))
             
         completed = 0
         snapshot_path = os.path.join("assets", "models", model_name) if model_name else os.path.join("assets", "models", "latest_snapshot.pt")
@@ -249,9 +246,14 @@ def run_train(episodes, workers, p1_deck_arg, opp_deck_arg, model_name, p2_type,
                 agent_module.ensemble.active_model.cpu()
                 pool = WorkerPool(model=agent_module.ensemble.active_model, num_workers=workers)
                 
-                # Move main process model back to GPU for fast Trainer updates
+                # Move main process model back to GPU so Learner has a VRAM-bound model
                 agent_module.ensemble.active_model.to(agent_module.ensemble.device)
-                trainer = Trainer(ensemble=agent_module.ensemble, lr=1e-4)
+                
+                # Spawn background Learner Process
+                trajectory_queue = pool.ctx.Queue()
+                metrics_queue = pool.ctx.Queue()
+                learner = LearnerProcess(agent_module.ensemble, trajectory_queue, metrics_queue, update_freq=100, batch_episodes=5, model_name=model_name)
+                learner.start()
 
                 # Use the pool's context for task queues
                 task_queue = pool.ctx.Queue()
@@ -259,8 +261,18 @@ def run_train(episodes, workers, p1_deck_arg, opp_deck_arg, model_name, p2_type,
                 
                 pool.start_server()
                 
-                for task in tasks:
-                    task_queue.put(task)
+                # Enqueue tasks in chunks or dynamically
+                for i in range(episodes):
+                    p2_deck = random.choice(opp_decks)
+                    p2_agent_choice = random.choice(available_p2_agents) if available_p2_agents[0] else None
+                    
+                    if start_epsilon is not None:
+                        epsilon = start_epsilon - ((start_epsilon - 0.01) * i / max(1, episodes * 0.8))
+                    else:
+                        epsilon = 0.3 - (0.29 * i / max(1, episodes * 0.8))
+                    epsilon = max(0.01, epsilon)
+                    
+                    task_queue.put((p1_deck_path, p2_deck, model_name, debug, p2_type, p2_agent_choice, epsilon, 1.0))
                     
                 # Put poison pills
                 for _ in range(workers):
@@ -272,25 +284,24 @@ def run_train(episodes, workers, p1_deck_arg, opp_deck_arg, model_name, p2_type,
                 pool.spawn_actors(ipc_worker_loop, args_list)
                 os.environ["KAGGLE_AGENT_CPU_ONLY"] = "0"
                 
+                policy_loss, value_loss = 0.0, 0.0
+                
                 for _ in range(episodes):
                     res = result_queue.get()
                     if not res: continue
                     p2_path, reward, ep_len, trajectory = res
                     completed += 1
-                    master_buffer.add_trajectory(trajectory)
                     
-                    policy_loss, value_loss = 0.0, 0.0
+                    trajectory_queue.put(trajectory)
+                    
+                    try:
+                        import queue
+                        policy_loss, value_loss = metrics_queue.get_nowait()
+                    except queue.Empty:
+                        pass
+                        
                     if completed % 5 == 0 or completed == episodes:
-                        policy_loss, value_loss = trainer.update(master_buffer)
-                        master_buffer.clear()
                         pbar.set_postfix({"P_Loss": f"{policy_loss:.3f}", "V_Loss": f"{value_loss:.3f}"})
-                        
-                        tmp_snapshot = snapshot_path + ".tmp"
-                        torch.save(agent_module.ensemble.active_model.state_dict(), tmp_snapshot)
-                        os.replace(tmp_snapshot, snapshot_path)
-                        
-                    if completed % 100 == 0 or completed == episodes:
-                        torch.save(agent_module.ensemble.active_model.state_dict(), checkpoint_path)
                         
                     writer.writerow([completed, os.path.basename(p2_path), reward, ep_len, policy_loss, value_loss])
                     csvfile.flush()
@@ -298,6 +309,8 @@ def run_train(episodes, workers, p1_deck_arg, opp_deck_arg, model_name, p2_type,
                     
                 pool.join_actors()
                 pool.stop()
+                learner.stop()
+                learner.join()
                 
             else:
                 agent_module.ipc_client = None
