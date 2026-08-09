@@ -11,5 +11,11 @@
   "r_ursulana_attack_bonus_per_prize": 0.02,
   "r_play_trainer": 0.05,
   "r_boss_ko_bonus": 0.5,
-  "r_play_stadium": 0.05
+  "r_boss_snipe_bonus": 1.0,
+  "r_play_stadium": 0.05,
+  "r_team_rocket_board_presence": 0.20,
+  "r_mewtwo_jackpot": 3.0,
+  "r_play_search_card": 0.05,
+  "r_hammer_tempo_bonus": 0.20,
+  "r_rescue_board_pivot": 0.15
 }

@@ -11,6 +11,19 @@ REWARD_CONFIG = {
     "r_damage_dealt_per_10": 0.01
 }
 
+# Lookup table for max attack damage of common meta attackers
+ATTACK_DAMAGE_LOOKUP = {
+    44: 240,    # Bloodmoon Ursaluna ex
+    140: 100,   # Fezandipiti ex
+    400: 30,    # Team Rocket's Tarountula
+    401: 30,    # Team Rocket's Spidops
+    414: 60,    # Team Rocket's Articuno
+    431: 160,   # Team Rocket's Mewtwo ex
+    432: 70,    # Team Rocket's Wobbuffet
+}
+
+TR_POKEMON_IDS = [400, 401, 414, 431, 432, 434]
+
 try:
     _reward_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "assets", "reward", "reward_shaping.json"))
     if os.path.exists(_reward_path):
@@ -44,11 +57,15 @@ def calculate_step_reward(parsed_obs, tracker):
     if opp_player.bench: opp_all_poke.extend(opp_player.bench)
     opp_all_poke = [p for p in opp_all_poke if p is not None]
     
+    current_tr_count = sum(1 for p in my_all_poke if p.id in TR_POKEMON_IDS)
+    
     current_energies = sum(len(p.energyCards) for p in my_all_poke)
     current_evolutions = sum(len(p.preEvolution) for p in my_all_poke)
     current_opp_damage = sum((p.maxHp - p.hp) for p in opp_all_poke)
     current_my_damage = sum((p.maxHp - p.hp) for p in my_all_poke)
     current_my_active_serial = my_player.active[0].serial if my_player.active and my_player.active[0] is not None else None
+    
+    current_pivots = sum(1 for p in my_all_poke if p.id in (140, 414, 400) for t in p.tools if t.id == 1157)
     
     has_fezandipiti = any(p.id == 140 for p in my_all_poke)
     has_ursulana = any(p.id == 44 for p in my_all_poke)
@@ -85,8 +102,31 @@ def calculate_step_reward(parsed_obs, tracker):
                                 played_card = tracker["last_hand"][opt.index]
                                 if played_card.id in (1182, 1088, 1218):
                                     tracker["boss_played_turn"] = parsed_obs.current.turn
+                                    
+                                    # Sniper Bonus Check
+                                    active_pkmn = my_player.active[0] if my_player.active and my_player.active[0] is not None else None
+                                    if active_pkmn:
+                                        attack_dmg = ATTACK_DAMAGE_LOOKUP.get(active_pkmn.id, 100)
+                                        valid_targets = [p for p in opp_player.bench if p is not None and p.hp <= attack_dmg]
+                                        if valid_targets:
+                                            snipe_bonus = REWARD_CONFIG.get("r_boss_snipe_bonus", 1.0)
+                                            print(f"\n[REWARD] 🎯 SNIPE OPPORTUNITY IDENTIFIED! (+{snipe_bonus:.2f}) 🎯\n")
+                                            step_reward += snipe_bonus
                                 elif played_card.id == 1251:
                                     step_reward += REWARD_CONFIG.get("r_play_stadium", 0.05)
+                                elif played_card.id in (1121, 1102, 1205, 1132, 1134):
+                                    search_bonus = REWARD_CONFIG.get("r_play_search_card", 0.05)
+                                    step_reward += search_bonus
+                                    print(f"\n[REWARD] 🔍 SEARCH CARD PLAYED! (+{search_bonus:.2f}) 🔍\n")
+                                elif played_card.id == 1120:
+                                    valid_targets = [
+                                        p for p in opp_all_poke
+                                        if p is not None and len(p.energyCards) > 0 and (p.maxHp >= 200 or len(p.preEvolution) > 0)
+                                    ]
+                                    if valid_targets:
+                                        hammer_bonus = REWARD_CONFIG.get("r_hammer_tempo_bonus", 0.20)
+                                        step_reward += hammer_bonus
+                                        print(f"\n[REWARD] 🔨 HAMMER DISRUPTION TARGET SPOTTED! (+{hammer_bonus:.2f}) 🔨\n")
                             except:
                                 pass
             
@@ -109,6 +149,26 @@ def calculate_step_reward(parsed_obs, tracker):
         if my_damage_delta < 0 and prizes_lost == 0:
             step_reward += REWARD_CONFIG.get("r_healing_per_10", 0.02) * (-my_damage_delta / 10.0)
             
+        # TR Synergy & Mewtwo Jackpot
+        tr_delta = current_tr_count - tracker.get("tr_pokemon_count", 0)
+        if tr_delta > 0:
+            tr_bonus = REWARD_CONFIG.get("r_team_rocket_board_presence", 0.20) * tr_delta
+            print(f"\n[REWARD] 🚀 TEAM ROCKET SWARM INCREASED! (+{tr_bonus:.2f}) 🚀\n")
+            step_reward += tr_bonus
+            
+        if my_player.active and my_player.active[0] is not None and my_player.active[0].id == 431:
+            if current_tr_count >= 4 and not tracker.get("mewtwo_jackpot_claimed", False):
+                jackpot = REWARD_CONFIG.get("r_mewtwo_jackpot", 3.0)
+                print(f"\n[REWARD] 🔮 MEWTWO EX POWER SAVER UNLOCKED! JACKPOT! (+{jackpot:.2f}) 🔮\n")
+                step_reward += jackpot
+                tracker["mewtwo_jackpot_claimed"] = True
+                
+        pivot_delta = current_pivots - tracker.get("rescue_board_pivots", 0)
+        if pivot_delta > 0:
+            pivot_bonus = REWARD_CONFIG.get("r_rescue_board_pivot", 0.15) * pivot_delta
+            print(f"\n[REWARD] 🛹 FREE PIVOT CREATED! (+{pivot_bonus:.2f}) 🛹\n")
+            step_reward += pivot_bonus
+            
         # 3. Dense Attack Rewards
         damage_delta = current_opp_damage - tracker["opp_damage"]
         if damage_delta > 0:
@@ -129,6 +189,9 @@ def calculate_step_reward(parsed_obs, tracker):
     tracker["my_damage"] = current_my_damage
     tracker["my_active_serial"] = current_my_active_serial
     tracker["had_fezandipiti"] = has_fezandipiti
+    tracker["tr_pokemon_count"] = current_tr_count
+    tracker["rescue_board_pivots"] = current_pivots
+    # mewtwo_jackpot_claimed is updated in-place above
     tracker["initialized"] = True
     
     return step_reward
