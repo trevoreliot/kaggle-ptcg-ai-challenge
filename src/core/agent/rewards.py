@@ -59,8 +59,12 @@ def calculate_step_reward(parsed_obs, tracker):
     
     current_tr_count = sum(1 for p in my_all_poke if p.id in TR_POKEMON_IDS)
     
+    my_all_poke = [p for p in my_player.active + my_player.bench if p is not None]
     current_energies = sum(len(p.energyCards) for p in my_all_poke)
-    current_evolutions = sum(len(p.preEvolution) for p in my_all_poke)
+    current_mewtwo_energies = sum(len(p.energyCards) for p in my_all_poke if p.id == 431)
+    current_ursaluna_energies = sum(len(p.energyCards) for p in my_all_poke if p.id == 44)
+    current_articuno_energies = sum(len(p.energyCards) for p in my_all_poke if p.id == 414)
+    current_evolutions = sum(1 for p in my_all_poke if p.preEvolution)
     current_opp_damage = sum((p.maxHp - p.hp) for p in opp_all_poke)
     current_my_damage = sum((p.maxHp - p.hp) for p in my_all_poke)
     current_my_active_serial = my_player.active[0].serial if my_player.active and my_player.active[0] is not None else None
@@ -114,8 +118,16 @@ def calculate_step_reward(parsed_obs, tracker):
                                             step_reward += snipe_bonus
                                 elif played_card.id == 1251:
                                     step_reward += REWARD_CONFIG.get("r_play_stadium", 0.05)
+                                elif played_card.id == 1218: # Cyrano
+                                    cyrano_bonus = REWARD_CONFIG.get("r_play_cyrano", 0.25)
+                                    step_reward += cyrano_bonus
+                                    print(f"\n[REWARD] 🎭 CYRANO PLAYED (TR EX SEARCH)! (+{cyrano_bonus:.2f}) 🎭\n")
+                                elif played_card.id == 1105: # Buddy-Buddy Poffin
+                                    poffin_bonus = REWARD_CONFIG.get("r_play_poffin", 0.15)
+                                    step_reward += poffin_bonus
+                                    print(f"\n[REWARD] 🍞 BUDDY-BUDDY POFFIN PLAYED (BASIC TR SEARCH)! (+{poffin_bonus:.2f}) 🍞\n")
                                 elif played_card.id in (1121, 1102, 1205, 1132, 1134):
-                                    search_bonus = REWARD_CONFIG.get("r_play_search_card", 0.05)
+                                    search_bonus = REWARD_CONFIG.get("r_play_search_card", 0.10)
                                     step_reward += search_bonus
                                     print(f"\n[REWARD] 🔍 SEARCH CARD PLAYED! (+{search_bonus:.2f}) 🔍\n")
                                 elif played_card.id == 1120:
@@ -129,11 +141,49 @@ def calculate_step_reward(parsed_obs, tracker):
                                         print(f"\n[REWARD] 🔨 HAMMER DISRUPTION TARGET SPOTTED! (+{hammer_bonus:.2f}) 🔨\n")
                             except:
                                 pass
+                    elif opt.type == 14: # OptionType.END
+                        pass_penalty = REWARD_CONFIG.get("r_pass_turn", -0.05)
+                        step_reward += pass_penalty
+                        print(f"\n[REWARD] 💤 TURN PASSED PREMATURELY! ({pass_penalty:.2f}) 💤\n")
+                        
+                        if any(o.type == 13 for o in tracker["last_options"]):
+                            missed_attack_penalty = REWARD_CONFIG.get("r_missed_attack_penalty", -1.0)
+                            step_reward += missed_attack_penalty
+                            print(f"\n[REWARD] ❌ PASSED TURN WITH ATTACK AVAILABLE! ({missed_attack_penalty:.2f}) ❌\n")
+                        
+                        benched_pokemon = [p for p in my_player.bench if p is not None]
+                        if len(benched_pokemon) == 0:
+                            empty_bench_penalty = REWARD_CONFIG.get("r_empty_bench_penalty", -0.50)
+                            step_reward += empty_bench_penalty
+                            print(f"\n[REWARD] 🚨 TURN ENDED WITH EMPTY BENCH! ({empty_bench_penalty:.2f}) 🚨\n")
+                            
+                    elif opt.type == 13: # OptionType.ATTACK
+                        attack_reward = REWARD_CONFIG.get("r_choose_attack", 0.25)
+                        step_reward += attack_reward
+                        print(f"\n[REWARD] ⚔️ ATTACK DECLARED! ({attack_reward:.2f}) ⚔️\n")
             
         # 2. Dense Setup Rewards
         energy_delta = current_energies - tracker["my_energies"]
         if energy_delta > 0:
             step_reward += REWARD_CONFIG["r_energy_attach"] * energy_delta
+            
+        mewtwo_energy_delta = current_mewtwo_energies - tracker.get("my_mewtwo_energies", 0)
+        if mewtwo_energy_delta > 0:
+            heavy_reward = REWARD_CONFIG.get("r_energy_attach_heavy", 0.10) * mewtwo_energy_delta
+            step_reward += heavy_reward
+            print(f"\n[REWARD] ⚡ MEWTWO EX CHARGED! (+{heavy_reward:.2f}) ⚡\n")
+            
+        ursaluna_energy_delta = current_ursaluna_energies - tracker.get("my_ursaluna_energies", 0)
+        if ursaluna_energy_delta > 0:
+            heavy_reward = REWARD_CONFIG.get("r_energy_attach_heavy", 0.10) * ursaluna_energy_delta
+            step_reward += heavy_reward
+            print(f"\n[REWARD] ⚡ URSALUNA BLOODMOON EX CHARGED! (+{heavy_reward:.2f}) ⚡\n")
+            
+        articuno_energy_delta = current_articuno_energies - tracker.get("my_articuno_energies", 0)
+        if articuno_energy_delta > 0:
+            articuno_reward = REWARD_CONFIG.get("r_energy_attach_articuno", 0.10) * articuno_energy_delta
+            step_reward += articuno_reward
+            print(f"\n[REWARD] ❄️ TEAM ROCKET'S ARTICUNO CHARGED! (+{articuno_reward:.2f}) ❄️\n")
             
         evo_delta = current_evolutions - tracker["my_evolutions"]
         if evo_delta > 0:
@@ -163,6 +213,13 @@ def calculate_step_reward(parsed_obs, tracker):
                 step_reward += jackpot
                 tracker["mewtwo_jackpot_claimed"] = True
                 
+        if my_player.active and my_player.active[0] is not None and my_player.active[0].id == 44:
+            if opp_prizes <= 3 and not tracker.get("ursaluna_active_reward_claimed", False):
+                ursa_jackpot = REWARD_CONFIG.get("r_ursaluna_active_jackpot", 1.5)
+                print(f"\n[REWARD] 🐻 URSALUNA BLOODMOON ACTIVATED IN ENDGAME! (+{ursa_jackpot:.2f}) 🐻\n")
+                step_reward += ursa_jackpot
+                tracker["ursaluna_active_reward_claimed"] = True
+                
         pivot_delta = current_pivots - tracker.get("rescue_board_pivots", 0)
         if pivot_delta > 0:
             pivot_bonus = REWARD_CONFIG.get("r_rescue_board_pivot", 0.15) * pivot_delta
@@ -178,12 +235,22 @@ def calculate_step_reward(parsed_obs, tracker):
                 if bonus > 0:
                     print(f"\n[REWARD] 🐻 URSALUNA BLOODMOON ATTACK BONUS GRANTED! (+{bonus:.2f}) 🐻\n")
                 base_dmg_reward += bonus
+                
+            if my_player.active and my_player.active[0] is not None and my_player.active[0].id == 431:
+                kicker = REWARD_CONFIG.get("r_mewtwo_attack_kicker", 1.0)
+                if kicker > 0:
+                    print(f"\n[REWARD] 💥 MEWTWO EX BLAST KICKER! (+{kicker:.2f}) 💥\n")
+                base_dmg_reward += kicker
+                
             step_reward += base_dmg_reward
             
     tracker["my_prizes"] = my_prizes
     tracker["opp_prizes"] = opp_prizes
     tracker["my_deck"] = my_deck
     tracker["my_energies"] = current_energies
+    tracker["my_mewtwo_energies"] = current_mewtwo_energies
+    tracker["my_ursaluna_energies"] = current_ursaluna_energies
+    tracker["my_articuno_energies"] = current_articuno_energies
     tracker["my_evolutions"] = current_evolutions
     tracker["opp_damage"] = current_opp_damage
     tracker["my_damage"] = current_my_damage

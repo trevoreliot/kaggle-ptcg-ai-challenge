@@ -68,7 +68,11 @@ class BatchedInferenceServer(mp.Process):
                         self.last_mtime = mtime
                         try:
                             # Load strictly to device to avoid RAM spikes
-                            self.model.load_state_dict(torch.load(self.snapshot_path, map_location=device, weights_only=True))
+                            state_dict = torch.load(self.snapshot_path, map_location=device, weights_only=True)
+                            if hasattr(self.model, "_orig_mod"):
+                                self.model._orig_mod.load_state_dict(state_dict)
+                            else:
+                                self.model.load_state_dict(state_dict)
                         except Exception as e:
                             print(f"[BatchServer] Failed to hot-reload weights: {e}")
                             

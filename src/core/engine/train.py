@@ -70,7 +70,7 @@ def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None, p2_type="rl"
         sys.stdout = devnull
         sys.stderr = devnull
         try:
-            env = make("cabt", configuration={"decks": [p1_deck, p2_deck]})
+            env = make("cabt", configuration={"decks": [p1_deck, p2_deck], "actTimeout": 99999, "runTimeout": 99999})
             agent_module._local_env_ref = env
             
             local_buffer = ReplayBuffer(gamma=0.99)
@@ -109,6 +109,9 @@ def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None, p2_type="rl"
     
     reward = env.state[0].reward if env.state[0].reward is not None else 0.0
     
+    # Scale terminal reward to override heavy in-game jackpots
+    scaled_terminal_reward = reward * 15.0
+    
     # Push the final dangling action from Player 1's state tracker
     tracker = agent_module._state_tracker[0]
     if tracker.get("last_state") is not None:
@@ -121,7 +124,7 @@ def worker_run_episode(p1_deck_path, p2_deck_path, model_name=None, p2_type="rl"
                 step_reward=0.0
             )
         
-    trajectory = local_buffer.finalize_episode(reward)
+    trajectory = local_buffer.finalize_episode(scaled_terminal_reward)
     episode_length = len(env.steps)
     
     opponent_name = p2_deck_path
@@ -190,6 +193,11 @@ def worker_wrapper(args):
         return None
     except Exception as e:
         import traceback
+        print(f"\n[Worker Exception] {e}")
+        traceback.print_exc()
+        return None
+    except Exception as e:
+        import traceback
         print(f"Worker exception: {e}")
         traceback.print_exc()
         return None
@@ -240,6 +248,16 @@ def run_train(episodes, workers, p1_deck_path, p2_deck_path, model_name, p2_type
         torch.save(agent_module.ensemble.active_model.state_dict(), snapshot_path)
         
         with tqdm(total=episodes, desc="Training", unit="match") as pbar:
+            tasks = []
+            for i in range(episodes):
+                p2_deck = random.choice(opp_decks)
+                p2_agent_choice = random.choice(available_p2_agents) if available_p2_agents[0] else None
+                epsilon = 0.0
+                if start_epsilon is not None and start_epsilon > 0.0:
+                    epsilon = start_epsilon - (start_epsilon * i / max(1, episodes * 0.8))
+                    epsilon = max(0.0, epsilon)
+                tasks.append((p1_deck_path, p2_deck, model_name, debug, p2_type, p2_agent_choice, epsilon, 1.0))
+
             if workers > 1:
                 from src.core.engine.worker_pool import WorkerPool
                 # Temporarily move to CPU to avoid massive VRAM usage when 48 actors unpickle the model
@@ -262,17 +280,8 @@ def run_train(episodes, workers, p1_deck_path, p2_deck_path, model_name, p2_type
                 pool.start_server()
                 
                 # Enqueue tasks in chunks or dynamically
-                for i in range(episodes):
-                    p2_deck = random.choice(opp_decks)
-                    p2_agent_choice = random.choice(available_p2_agents) if available_p2_agents[0] else None
-                    
-                    if start_epsilon is not None:
-                        epsilon = start_epsilon - ((start_epsilon - 0.01) * i / max(1, episodes * 0.8))
-                    else:
-                        epsilon = 0.3 - (0.29 * i / max(1, episodes * 0.8))
-                    epsilon = max(0.01, epsilon)
-                    
-                    task_queue.put((p1_deck_path, p2_deck, model_name, debug, p2_type, p2_agent_choice, epsilon, 1.0))
+                for task in tasks:
+                    task_queue.put(task)
                     
                 # Put poison pills
                 for _ in range(workers):

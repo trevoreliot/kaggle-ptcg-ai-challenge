@@ -150,8 +150,7 @@ class BaseNetwork(nn.Module):
             nn.Linear(hidden_size, int(hidden_size / 2)),
             nn.LayerNorm(int(hidden_size / 2)),
             nn.ReLU(),
-            nn.Linear(int(hidden_size / 2), 1),
-            nn.Tanh() # Squeeze to [-1, 1]
+            nn.Linear(int(hidden_size / 2), 1)
         )
         
         self.policy_head = nn.Sequential(

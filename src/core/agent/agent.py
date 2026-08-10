@@ -181,9 +181,15 @@ def agent(obs_dict: dict) -> list[int]:
         _opp_deck_cache[best_archetype] = opponent_deck_pred
 
     temperature = globals().get("CURRENT_TEMPERATURE", 1.0)
+    epsilon = globals().get("CURRENT_EPSILON", 0.0)
     
     # Execute Search
-    selections = mcts.search(obs_dict, agent_deck, opponent_deck_pred, is_training=IS_TRAINING, temperature=temperature)
+    force_explore = False
+    if IS_TRAINING and random.random() < epsilon:
+        selections = []
+        force_explore = True
+    else:
+        selections = mcts.search(obs_dict, agent_deck, opponent_deck_pred, is_training=IS_TRAINING, temperature=temperature)
     
     # Fallback to policy sampling if MCTS failed
     if not selections:
@@ -200,7 +206,7 @@ def agent(obs_dict: dict) -> list[int]:
             epsilon = globals().get("CURRENT_EPSILON", 0.01)
             
             # Epsilon-greedy check
-            if random.random() < epsilon:
+            if force_explore or random.random() < epsilon:
                 valid_probs = np.ones(len(options)) / len(options)
             else:
                 scaled_logits = valid_logits / temperature

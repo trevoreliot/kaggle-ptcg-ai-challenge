@@ -21,8 +21,8 @@ def main():
                         help="The specific rules-based agent to use if --p2-type is rules (or 'all', 'aggro', 'control', 'prob' for archetype).")
     parser.add_argument("--debug", action="store_true",
                         help="Enable cProfile worker profiling.")
-    parser.add_argument("--epsilon", type=float, default=None,
-                        help="Starting epsilon for exploration decay.")
+    parser.add_argument("--epsilon", type=float, default=0.0,
+                        help="Starting epsilon for exploration decay. Defaults to 0.0 (no randomness).")
     args = parser.parse_args()
     
     if args.p2_type in ["rl", "mixed"] and args.p2_agent != "all":

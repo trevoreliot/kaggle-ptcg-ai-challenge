@@ -116,6 +116,16 @@ def run_evaluate(episodes, p1_deck_arg, opp_deck_arg, model_name, p2_type, p2_ag
         first_prizes.append(1 if first_prize == "p1" else 0)
         kos_received.append(kos)
         
+        # Save HTML replay for the last episode
+        if ep == episodes - 1:
+            os.makedirs(os.path.join("assets", "results", "diagnostics"), exist_ok=True)
+            replay_path = os.path.join("assets", "results", "diagnostics", "latest_replay.html")
+            with open(replay_path, "w") as f:
+                f.write(env.render(mode="html"))
+            
+            meta_path = os.path.join("assets", "results", "diagnostics", "latest_replay_meta.json")
+            with open(meta_path, "w") as f:
+                json.dump({"reward": reward, "opponent": p2_agent_name}, f)
     diagnostics["avg_length"] = sum(lengths) / len(lengths) if lengths else 0
     diagnostics["avg_hand_size"] = sum(hand_sizes) / len(hand_sizes) if hand_sizes else 0
     diagnostics["avg_entropy"] = sum(entropies) / len(entropies) if entropies else 0
