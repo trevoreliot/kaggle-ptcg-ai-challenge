@@ -133,7 +133,7 @@ class BaseNetwork(nn.Module):
     Deep Residual Network Architecture for the AI agent.
     Scales to millions of parameters while fitting in Kaggle constraints.
     """
-    def __init__(self, input_size: int = 6160, hidden_size: int = 512, num_blocks: int = 4, policy_size: int = 512):
+    def __init__(self, input_size: int = 6160, hidden_size: int = 512, num_blocks: int = 4, policy_size: int = 2048):
         super(BaseNetwork, self).__init__()
         
         self.input_layer = nn.Sequential(

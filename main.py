@@ -23,6 +23,8 @@ def main():
                         help="Enable cProfile worker profiling.")
     parser.add_argument("--epsilon", type=float, default=0.0,
                         help="Starting epsilon for exploration decay. Defaults to 0.0 (no randomness).")
+    parser.add_argument("--alpha", type=float, default=0.0,
+                        help="Dirichlet noise alpha parameter for MCTS. If > 0, overrides epsilon-greedy with MCTS noise.")
     args = parser.parse_args()
     
     if args.p2_type in ["rl", "mixed"] and args.p2_agent != "all":
@@ -33,7 +35,7 @@ def main():
         run_play(args.p1_deck, args.opp_deck, args.p2_type, args.p2_agent)
     elif args.mode == "train":
         from src.core.engine.train import run_train
-        run_train(args.episodes, args.workers, args.p1_deck, args.opp_deck, args.model_name, args.p2_type, args.p2_agent, args.debug, args.epsilon)
+        run_train(args.episodes, args.workers, args.p1_deck, args.opp_deck, args.model_name, args.p2_type, args.p2_agent, args.debug, args.epsilon, args.alpha)
     elif args.mode == "evaluate":
         from src.core.engine.evaluate import run_evaluate
         run_evaluate(args.episodes, args.p1_deck, args.opp_deck, args.model_name, args.p2_type, args.p2_agent)

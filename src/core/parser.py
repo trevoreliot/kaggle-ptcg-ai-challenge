@@ -59,6 +59,7 @@ class Option:
 @dataclass
 class SelectState:
     type: int = 0
+    context: int = 0
     minCount: int = 1
     maxCount: int = 1
     option: List[Option] = field(default_factory=list)
@@ -138,6 +139,7 @@ def parse_observation(obs_dict: dict) -> Observation:
             
         obs.select = SelectState(
             type=s.get("type", 0),
+            context=s.get("context", 0),
             minCount=s.get("minCount", 1),
             maxCount=s.get("maxCount", 1),
             option=options

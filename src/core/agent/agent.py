@@ -50,7 +50,8 @@ for _p in [0, 1]:
         "last_state": None,
         "last_actions": None,
         "last_log_prob": None,
-        "last_value": None
+        "last_value": None,
+        "reward_metrics": {}
     }
 
 def reset_state_tracking():
@@ -69,7 +70,8 @@ def reset_state_tracking():
             "last_state": None,
             "last_actions": None,
             "last_log_prob": None,
-            "last_value": None
+            "last_value": None,
+            "reward_metrics": {}
         }
 
 def load_deck(filepath: str = "Team_Rockets_Box.csv") -> list[int]:
@@ -87,6 +89,88 @@ def load_deck(filepath: str = "Team_Rockets_Box.csv") -> list[int]:
             with open(path, "r") as f:
                 return [int(line.strip()) for line in f.readlines() if line.strip()]
     return [5] * 60
+
+def get_global_action_id(opt) -> int:
+    """
+    Map an option (dict or object) to a fixed global ID between 0 and 2047.
+    """
+    try:
+        def get_val(key, default=0):
+            if isinstance(opt, dict):
+                return opt.get(key, default)
+            return opt.kwargs.get(key, default)
+            
+        t = opt["type"] if isinstance(opt, dict) else opt.type
+        
+        if t == 0: # NUMBER
+            num = get_val("number", 0)
+            return min(60, num)
+        elif t == 1: # YES
+            return 61
+        elif t == 2: # NO
+            return 62
+        elif t == 3: # CARD
+            area = get_val("area", 0)
+            idx = get_val("index", 0)
+            return 63 + (area * 60) + min(59, idx) # Max 12 * 60 = 720 -> 783
+        elif t == 4: # TOOL_CARD
+            area = get_val("area", 0)
+            idx = get_val("index", 0)
+            t_idx = get_val("toolIndex", 0)
+            # Area is usually 4 or 5 (Active/Bench), so 2 possibilities * 6 Pokemon * 4 tools
+            area_offset = 0 if area == 4 else 1
+            return 784 + (area_offset * 24) + (min(5, idx) * 4) + min(3, t_idx) # Max 48 -> 832
+        elif t == 5: # ENERGY_CARD
+            area = get_val("area", 0)
+            idx = get_val("index", 0)
+            e_idx = get_val("energyIndex", 0)
+            area_offset = 0 if area == 4 else 1
+            return 833 + (area_offset * 120) + (min(5, idx) * 20) + min(19, e_idx) # Max 240 -> 1073
+        elif t == 6: # ENERGY
+            area = get_val("area", 0)
+            idx = get_val("index", 0)
+            e_idx = get_val("energyIndex", 0)
+            area_offset = 0 if area == 4 else 1
+            return 1074 + (area_offset * 120) + (min(5, idx) * 20) + min(19, e_idx) # Max 240 -> 1314
+        elif t == 7: # PLAY
+            idx = get_val("index", 0)
+            return 1315 + min(59, idx) # Max 60 -> 1375
+        elif t == 8: # ATTACH
+            idx = get_val("index", 0)
+            in_play_idx = get_val("inPlayIndex", 0)
+            in_play_area = get_val("inPlayArea", 4)
+            area_offset = 0 if in_play_area == 4 else 1
+            # 60 cards * 2 areas * 6 slots = 720 possibilities
+            return 1376 + (min(29, idx % 30) * 12) + (area_offset * 6) + min(5, in_play_idx) # Max 360 -> 1736
+        elif t == 9: # EVOLVE
+            idx = get_val("index", 0)
+            in_play_idx = get_val("inPlayIndex", 0)
+            in_play_area = get_val("inPlayArea", 4)
+            area_offset = 0 if in_play_area == 4 else 1
+            return 1737 + (min(9, idx % 10) * 12) + (area_offset * 6) + min(5, in_play_idx) # Max 120 -> 1857
+        elif t == 10: # ABILITY
+            idx = get_val("index", 0)
+            return 1858 + min(59, idx) # Max 60 -> 1918
+        elif t == 11: # DISCARD
+            idx = get_val("index", 0)
+            return 1919 + min(59, idx) # Max 60 -> 1979
+        elif t == 12: # RETREAT
+            return 1980
+        elif t == 13: # ATTACK
+            attack_id = get_val("attackId", 0)
+            return 1981 + (attack_id % 20)
+        elif t == 14: # END
+            return 2001
+        elif t == 15: # SKILL
+            idx = get_val("serial", 0)
+            return 2002 + (idx % 20)
+        elif t == 16: # SPECIAL_CONDITION
+            cond = get_val("specialConditionType", 0)
+            return 2022 + min(4, cond)
+    except Exception as e:
+        pass
+    return 2047
+
 
 # Load default deck for when the agent is called standalone
 agent_deck = load_deck()
@@ -120,6 +204,60 @@ def agent(obs_dict: dict) -> list[int]:
         if ensemble.current_mode != best_archetype:
             print(f"[Bayesian] High confidence (>85%) detected for archetype: {best_archetype}. Attempting hot-swap.")
             ensemble.switch_model(best_archetype)
+            
+    # ACTION MASKING VALIDATION
+    valid_options_dict = []
+    valid_options_parsed = []
+    
+    my_player = parsed_obs.current.players[parsed_obs.current.yourIndex]
+    tracker = _state_tracker[parsed_obs.current.yourIndex]
+    
+    if tracker.get("current_turn") != parsed_obs.current.turn:
+        tracker["current_turn"] = parsed_obs.current.turn
+        tracker["has_attached_energy_this_turn"] = False
+        tracker["current_phase"] = 1
+        
+    is_main_phase = any(o.type == 14 for o in parsed_obs.select.option)
+    
+    def get_canonical_phase(t):
+        if t == 7: return 1 # PLAY
+        if t == 9: return 2 # EVOLVE
+        if t == 8: return 3 # ATTACH
+        if t in (10, 12, 15): return 4 # ABILITY, RETREAT, SKILL
+        if t in (13, 14): return 5 # ATTACK, END
+        return 0
+        
+    valid_mask = []
+    original_indices = []
+    original_options_dict = obs_dict["select"]["option"]
+    original_options_parsed = parsed_obs.select.option
+    
+    for i, (dict_opt, parsed_opt) in enumerate(zip(obs_dict["select"]["option"], parsed_obs.select.option)):
+        opt_type = parsed_opt.type
+        is_valid = True
+        
+        if opt_type == 13: # ATTACK
+            active_pkmn = my_player.active[0] if my_player.active and len(my_player.active) > 0 else None
+            if active_pkmn:
+                energy_count = sum(2 if getattr(e, 'id', None) == 15 else 1 for e in getattr(active_pkmn, 'energyCards', []))
+                if energy_count == 0:
+                    is_valid = False
+        elif opt_type == 8: # ATTACH (Energy)
+            if tracker.get("has_attached_energy_this_turn", False):
+                is_valid = False
+                
+        if is_valid and is_main_phase:
+            phase = get_canonical_phase(opt_type)
+            if phase > 0 and phase < tracker.get("current_phase", 1):
+                is_valid = False
+                
+        valid_mask.append(is_valid)
+        if is_valid:
+            valid_options_dict.append(dict_opt)
+            valid_options_parsed.append(parsed_opt)
+            original_indices.append(i)
+            
+    # Removed observation option mutation here to prevent MCTS index mismatch.
             
     import numpy as np
     from src.core.agent.mcts import MCTSEngine
@@ -182,32 +320,70 @@ def agent(obs_dict: dict) -> list[int]:
 
     temperature = globals().get("CURRENT_TEMPERATURE", 1.0)
     epsilon = globals().get("CURRENT_EPSILON", 0.0)
+    alpha = globals().get("CURRENT_ALPHA", 0.0)
     
     # Execute Search
     force_explore = False
-    if IS_TRAINING and random.random() < epsilon:
-        selections = []
-        force_explore = True
+    if IS_TRAINING and alpha > 0.0:
+        selections = mcts.search(obs_dict, agent_deck, opponent_deck_pred, is_training=IS_TRAINING, temperature=temperature, epsilon=epsilon, alpha=alpha, valid_mask=valid_mask)
     else:
-        selections = mcts.search(obs_dict, agent_deck, opponent_deck_pred, is_training=IS_TRAINING, temperature=temperature)
+        # MCTS returns index into the original options array (cabt engine indices)
+        # We don't map it here since valid_mask handles filtering internally in MCTS
+        if IS_TRAINING and random.random() < epsilon:
+            selections = []
+            force_explore = True
+        else:
+            selections = mcts.search(obs_dict, agent_deck, opponent_deck_pred, is_training=IS_TRAINING, temperature=temperature, valid_mask=valid_mask)
+            
+    # Original options were not mutated, so no need to restore.
     
     # Fallback to policy sampling if MCTS failed
     if not selections:
-        options = parsed_obs.select.option
+        options = original_options_parsed
         max_count = min(parsed_obs.select.maxCount, len(options))
         min_count = parsed_obs.select.minCount
         if max_count == 0:
             if IS_EVALUATING:
                 evaluation_telemetry["action_paralysis"] += 1
             return []
-        valid_logits = np.array(policy_logits[:len(options)])
+        global_ids = [get_global_action_id(opt) for opt in options]
+        valid_logits = np.array([policy_logits[idx] if idx < len(policy_logits) else -1e9 for idx in global_ids])
         
+        # Apply strict validity mask to prevent picking illegal actions
+        for i, is_v in enumerate(valid_mask):
+            if not is_v:
+                valid_logits[i] = -1e9
+        
+        # Count how many VALID options we actually have
+        num_valid = sum(1 for is_v in valid_mask if is_v)
+        
+        # Hard ban on passing the turn if other VALID options exist during training
+        # This forces the agent to learn to play its cards instead of stalling
+        if IS_TRAINING and num_valid > 1:
+            for i, opt in enumerate(options):
+                opt_type = opt["type"] if isinstance(opt, dict) else getattr(opt, "type", None)
+                if opt_type == 14: # OptionType.END
+                    if valid_mask[i]:
+                        valid_logits[i] = -1e9
+                        valid_mask[i] = False
+                    break
+
         if IS_TRAINING:
             epsilon = globals().get("CURRENT_EPSILON", 0.01)
+            alpha = globals().get("CURRENT_ALPHA", 0.0)
             
-            # Epsilon-greedy check
-            if force_explore or random.random() < epsilon:
-                valid_probs = np.ones(len(options)) / len(options)
+            # Epsilon-greedy check ONLY if alpha == 0
+            if force_explore or (alpha == 0.0 and random.random() < epsilon):
+                valid_probs = np.zeros(len(options))
+                for i, is_v in enumerate(valid_mask):
+                    if is_v:
+                        valid_probs[i] = 1.0
+                            
+                # Failsafe: If everything valid was masked out somehow, just allow the first option
+                if valid_probs.sum() == 0:
+                    valid_probs[0] = 1.0
+                    
+                valid_probs = valid_probs / valid_probs.sum()
             else:
                 scaled_logits = valid_logits / temperature
                 exp_logits = np.exp(scaled_logits - np.max(scaled_logits))
@@ -218,12 +394,16 @@ def agent(obs_dict: dict) -> list[int]:
                 sampled_actions = np.random.choice(len(options), size=target_size, replace=False, p=valid_probs)
                 selections = sampled_actions.tolist()
             except ValueError:
-                # Fallback if probability array has issues (e.g. fewer non-zero probs than target_size)
+                # Fallback if probability array has issues
                 action = np.random.choice(len(options), p=valid_probs)
                 selections = [action]
                 if min_count > 1:
-                    others = [x for x in range(len(options)) if x != action]
+                    others = [x for x in range(len(options)) if x != action and valid_mask[x]]
                     selections.extend(random.sample(others, min(min_count - 1, len(others))))
+                    # Failsafe if not enough valid options
+                    if len(selections) < min_count:
+                        even_more = [x for x in range(len(options)) if x not in selections]
+                        selections.extend(random.sample(even_more, min(min_count - len(selections), len(even_more))))
         else:
             # Greedy decoding for evaluation/inference
             best_indices = np.argsort(valid_logits)[::-1]
@@ -265,6 +445,18 @@ def agent(obs_dict: dict) -> list[int]:
             tracker["last_hand"] = my_player.hand if my_player.hand is not None else []
             tracker["last_log_prob"] = dummy_log_prob
             tracker["last_value"] = value
+
+            # Track attachments and phase progression
+            for a in actions_to_push:
+                if a < len(parsed_obs.select.option):
+                    opt = parsed_obs.select.option[a]
+                    if opt.type == 8:
+                        tracker["has_attached_energy_this_turn"] = True
+                        
+                    if is_main_phase:
+                        action_phase = get_canonical_phase(opt.type)
+                        if action_phase > 0:
+                            tracker["current_phase"] = max(tracker.get("current_phase", 1), action_phase)
 
         except Exception as e:
             import traceback

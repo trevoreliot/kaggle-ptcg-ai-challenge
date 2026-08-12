@@ -13,8 +13,39 @@ def load_data(csv_path):
     if not os.path.exists(csv_path):
         return pd.DataFrame(columns=["Episode", "Opponent_Deck", "Reward", "Episode_Length", "Policy_Loss", "Value_Loss"])
     
-    # Read the data
-    df = pd.read_csv(csv_path)
+    try:
+        df = pd.read_csv(csv_path)
+    except Exception:
+        # File has mixed rows due to new reward keys being added mid-run
+        import json
+        import csv
+        
+        try:
+            with open(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "reward", "reward_shaping.json"), "r") as f:
+                reward_keys = sorted(list(json.load(f).keys()))
+            correct_header = ["Episode", "Opponent_Deck", "Reward"]
+            for k in reward_keys:
+                correct_header.extend([f"Count_{k}", f"Total_{k}"])
+        except:
+            correct_header = None
+            
+        if correct_header:
+            parsed_rows = []
+            with open(csv_path, 'r') as f:
+                reader = csv.reader(f)
+                next(reader, None) # Skip old header
+                for row in reader:
+                    if len(row) == len(correct_header):
+                        parsed_rows.append(row)
+            if parsed_rows:
+                df = pd.DataFrame(parsed_rows, columns=correct_header)
+                for c in correct_header:
+                    if c != "Opponent_Deck":
+                        df[c] = pd.to_numeric(df[c], errors='coerce')
+                return df
+                
+        return pd.DataFrame()
+        
     return df
 
 results_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "results", "rl_training")
@@ -23,7 +54,7 @@ if not os.path.exists(results_dir):
     st.warning("Results directory not found! Run the training loop first.")
     st.stop()
 
-csv_files = [f for f in os.listdir(results_dir) if f.endswith('.csv')]
+csv_files = [f for f in os.listdir(results_dir) if f.endswith('.csv') and not f.endswith('_reward_metrics.csv')]
 if not csv_files:
     st.warning("No CSV files found in the results directory! Run the training loop to generate metrics.")
     st.stop()
@@ -36,6 +67,9 @@ df = load_data(csv_path)
 if df.empty:
     st.warning(f"No training data found in {selected_csv}!")
     st.stop()
+    
+reward_csv_path = csv_path.replace('_training_metrics.csv', '_reward_metrics.csv')
+reward_df = load_data(reward_csv_path)
 
 # ---- Filters ----
 st.sidebar.header("Filters")
@@ -43,15 +77,23 @@ min_match = st.sidebar.number_input("Start from Match # (e.g. 100000)", min_valu
 
 if min_match > 0 and len(df) > min_match:
     df = df.iloc[min_match:]
+    if not reward_df.empty and len(reward_df) > min_match:
+        reward_df = reward_df.iloc[min_match:]
 elif min_match > 0:
     st.warning(f"Dataset only has {len(df)} matches. Cannot filter from {min_match}.")
+
+limit_last_1000 = st.sidebar.checkbox("Limit to Last 1000 Matches", value=False)
+if limit_last_1000:
+    df = df.tail(1000)
+    if not reward_df.empty:
+        reward_df = reward_df.tail(1000)
 
 if df.empty:
     st.warning("Filtered dataset is empty!")
     st.stop()
 
 # ---- Tabs ----
-tab_overview, tab_diagnostics = st.tabs(["📊 Training Overview", "🔬 Matchup Diagnostics"])
+tab_overview, tab_diagnostics, tab_rewards = st.tabs(["📊 Training Overview", "🔬 Matchup Diagnostics", "💰 Reward Analytics"])
 
 with tab_overview:
     # ---- KPIs ----
@@ -156,6 +198,30 @@ with tab_overview:
             st.plotly_chart(fig_policy, width='stretch')
         else:
             st.info("No Policy Loss data yet.")
+            
+        st.divider()
+        st.subheader("💰 Accumulated Match Reward")
+        if not reward_df.empty:
+            total_cols = [c for c in reward_df.columns if c.startswith("Total_")]
+            if total_cols:
+                reward_sum_df = reward_df[["Episode"]].copy()
+                reward_sum_df["Total_Reward"] = reward_df[total_cols].sum(axis=1)
+                reward_sum_df["Smooth_Reward"] = reward_sum_df["Total_Reward"].rolling(window=min(50, len(reward_sum_df)), min_periods=1).mean()
+                
+                sample_step_rew = max(1, len(reward_sum_df) // 500)
+                sampled_rew_df = reward_sum_df.iloc[::sample_step_rew]
+                
+                fig_rew = px.line(
+                    sampled_rew_df,
+                    x=sampled_rew_df.index,
+                    y=["Total_Reward", "Smooth_Reward"],
+                    title="Total Accumulated Reward per Match",
+                    render_mode="svg"
+                )
+                fig_rew.update_layout(xaxis_title="Total Matches Played", yaxis_title="Total Reward")
+                st.plotly_chart(fig_rew, width='stretch')
+            else:
+                st.info("No detailed reward data available yet.")
         
     with row2_col2:
         value_df = df[df["Value_Loss"] != 0.0].copy()
@@ -177,6 +243,28 @@ with tab_overview:
             st.plotly_chart(fig_value, width='stretch')
         else:
             st.info("No Value Loss data yet.")
+            
+        st.divider()
+        st.subheader("⚔️ Damage Dealt Trend")
+        if not reward_df.empty and "Count_r_damage_dealt_per_10" in reward_df.columns:
+            damage_df = reward_df[["Episode", "Count_r_damage_dealt_per_10"]].copy()
+            damage_df["Total_Damage"] = damage_df["Count_r_damage_dealt_per_10"] * 10
+            damage_df["Smooth_Damage"] = damage_df["Total_Damage"].rolling(window=min(50, len(damage_df)), min_periods=1).mean()
+            
+            sample_step_dmg = max(1, len(damage_df) // 500)
+            sampled_dmg_df = damage_df.iloc[::sample_step_dmg]
+            
+            fig_dmg = px.line(
+                sampled_dmg_df,
+                x=sampled_dmg_df.index,
+                y=["Total_Damage", "Smooth_Damage"],
+                title="Damage Dealt per Match",
+                render_mode="svg"
+            )
+            fig_dmg.update_layout(xaxis_title="Total Matches Played", yaxis_title="Total Damage")
+            st.plotly_chart(fig_dmg, width='stretch')
+        else:
+            st.info("No Damage data available yet.")
 
 with tab_diagnostics:
     st.subheader("🔬 Matchup Telemetry & Diagnostics")
@@ -208,6 +296,89 @@ with tab_diagnostics:
             st.info("No diagnostic JSON files found. Run the simulator in evaluate mode.")
     else:
         st.info("Diagnostics directory not found. Run the simulator in evaluate mode.")
+
+with tab_rewards:
+    st.subheader("💰 Reward Analytics")
+    if not reward_df.empty:
+        # Get count and total columns
+        count_cols = [c for c in reward_df.columns if c.startswith("Count_")]
+        total_cols = [c for c in reward_df.columns if c.startswith("Total_")]
+        
+        # We'll group by the Reward column (1 = Win, -1 = Loss) to compare them
+        # Let's map it for easier reading
+        reward_df_mapped = reward_df.copy()
+        reward_df_mapped["Outcome"] = reward_df_mapped["Reward"].map({1.0: "Win", -1.0: "Loss"})
+        
+        if count_cols and total_cols:
+            st.markdown("#### Average Reward Metrics Per Match (Wins vs Losses)")
+            st.caption("A combined view of trigger counts and total value accumulated for each reward.")
+            
+            import matplotlib.pyplot as plt
+            import matplotlib.colors as mcolors
+            
+            def absolute_gradient(subset_df, cmap_name):
+                cmap = plt.get_cmap(cmap_name)
+                styles = pd.DataFrame('', index=subset_df.index, columns=subset_df.columns)
+                
+                # Calculate global max across the entire subset (Triggers vs Totals are handled separately)
+                max_val = subset_df.abs().max().max()
+                
+                for idx, row in subset_df.iterrows():
+                    for c, val in row.items():
+                        if pd.isna(val) or max_val == 0:
+                            norm = 0
+                        else:
+                            norm = abs(val) / max_val
+                            
+                        bg_color = mcolors.to_hex(cmap(norm))
+                        rgb = mcolors.to_rgb(bg_color)
+                        luminance = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+                        text_color = "#000000" if luminance > 0.5 else "#ffffff"
+                        styles.loc[idx, c] = f"background-color: {bg_color}; color: {text_color}"
+                        
+                return styles
+            
+            count_summary = reward_df_mapped.groupby("Outcome")[count_cols].mean().T
+            count_summary.index = count_summary.index.str.replace("Count_", "")
+            count_summary = count_summary.drop(index=["r_win", "r_loss"], errors="ignore")
+            
+            total_summary = reward_df_mapped.groupby("Outcome")[total_cols].mean().T
+            total_summary.index = total_summary.index.str.replace("Total_", "")
+            total_summary = total_summary.drop(index=["r_win", "r_loss"], errors="ignore")
+            
+            import pandas as pd
+            combined = pd.DataFrame(index=count_summary.index)
+            
+            subset_count = []
+            subset_total = []
+            
+            if "Win" in count_summary.columns:
+                combined["Win_Triggers"] = count_summary["Win"]
+                subset_count.append("Win_Triggers")
+                combined["Win_Total"] = total_summary["Win"]
+                subset_total.append("Win_Total")
+                
+            if "Loss" in count_summary.columns:
+                combined["Loss_Triggers"] = count_summary["Loss"]
+                subset_count.append("Loss_Triggers")
+                combined["Loss_Total"] = total_summary["Loss"]
+                subset_total.append("Loss_Total")
+                
+            combined = combined.fillna(0).reset_index().rename(columns={"index": "Reward"})
+            if "Win_Triggers" in combined.columns:
+                combined = combined.sort_values(by="Win_Triggers", ascending=False)
+            
+            c1, c2, c3 = st.columns([1, 6, 1])
+            with c2:
+                styled = combined.style.format("{:.2f}", subset=subset_count + subset_total)
+                if subset_count:
+                    styled = styled.apply(absolute_gradient, cmap_name="Blues", subset=subset_count, axis=None)
+                if subset_total:
+                    styled = styled.apply(absolute_gradient, cmap_name="Oranges", subset=subset_total, axis=None)
+                    
+                st.dataframe(styled, height=800, use_container_width=False, hide_index=True)
+    else:
+        st.info("No reward metrics CSV found for this training session.")
 
 if st.button("🔄 Refresh Data"):
     st.rerun()

@@ -36,6 +36,11 @@ class MCTSNode:
                 options = search_state.observation.select.option
                 if options:
                     self.untried_actions = list(range(len(options)))
+                    print(f"DEBUG MCTS: node initialized with {len(options)} options, is_root={self.parent is None}")
+                    if len(options) > 1:
+                        end_idx = next((i for i, opt in enumerate(options) if opt.type == 14), None)
+                        if end_idx is not None:
+                            self.untried_actions.remove(end_idx)
                 else:
                     self.is_terminal = True
             else:
@@ -59,7 +64,7 @@ class MCTSEngine:
         self.num_simulations = num_simulations
         self.c_puct = c_puct
         
-    def search(self, obs_dict: dict, agent_deck: list, opponent_deck_pred: list, is_training: bool = False, temperature: float = 1.0) -> List[int]:
+    def search(self, obs_dict: dict, agent_deck: list, opponent_deck_pred: list, is_training: bool = False, temperature: float = 1.0, epsilon: float = 0.25, alpha: float = 0.3, valid_mask: list = None) -> List[int]:
         if cg_api is None:
             return []
             
@@ -102,10 +107,23 @@ class MCTSEngine:
             
         root = MCTSNode(search_state=root_state)
         
+        if valid_mask is not None and root.untried_actions:
+            filtered_untried = []
+            for a in root.untried_actions:
+                if a < len(valid_mask) and valid_mask[a]:
+                    filtered_untried.append(a)
+            root.untried_actions = filtered_untried
+        
         if not root.untried_actions:
             cg_api.search_release(root_state.searchId)
             cg_api.search_end()
             return []
+            
+        import numpy as np
+        root_noise_map = {}
+        if is_training and root.untried_actions and alpha > 0.0:
+            root_noise = np.random.dirichlet([alpha] * len(root.untried_actions))
+            root_noise_map = {action: noise for action, noise in zip(root.untried_actions, root_noise)}
             
         for _ in range(self.num_simulations):
             node = root
@@ -124,7 +142,12 @@ class MCTSEngine:
                 except Exception as e:
                     child = MCTSNode(parent=node, action=action, search_state=None)
                 
-                child.prior = 1.0 / (len(node.children) + len(node.untried_actions) + 1)
+                base_prior = 1.0 / (len(node.children) + len(node.untried_actions) + 1)
+                if is_training and node == root and action in root_noise_map:
+                    child.prior = (1 - epsilon) * base_prior + epsilon * root_noise_map[action]
+                else:
+                    child.prior = base_prior
+                
                 node.children.append(child)
                 node = child
             
