@@ -229,6 +229,7 @@ def agent(obs_dict: dict) -> list[int]:
         
     valid_mask = []
     original_indices = []
+    action_phases = {}
     original_options_dict = obs_dict["select"]["option"]
     original_options_parsed = parsed_obs.select.option
     
@@ -253,6 +254,7 @@ def agent(obs_dict: dict) -> list[int]:
                 
         valid_mask.append(is_valid)
         if is_valid:
+            action_phases[i] = get_canonical_phase(opt_type)
             valid_options_dict.append(dict_opt)
             valid_options_parsed.append(parsed_opt)
             original_indices.append(i)
@@ -325,7 +327,12 @@ def agent(obs_dict: dict) -> list[int]:
     # Execute Search
     force_explore = False
     if IS_TRAINING and alpha > 0.0:
-        selections = mcts.search(obs_dict, agent_deck, opponent_deck_pred, is_training=IS_TRAINING, temperature=temperature, epsilon=epsilon, alpha=alpha, valid_mask=valid_mask)
+        selections = mcts.search(
+            obs_dict, agent_deck, opponent_deck_pred, 
+            is_training=IS_TRAINING, temperature=temperature, 
+            epsilon=epsilon, alpha=alpha, valid_mask=valid_mask,
+            action_phases=action_phases, phase_budgeting=True
+        )
     else:
         # MCTS returns index into the original options array (cabt engine indices)
         # We don't map it here since valid_mask handles filtering internally in MCTS
@@ -333,7 +340,12 @@ def agent(obs_dict: dict) -> list[int]:
             selections = []
             force_explore = True
         else:
-            selections = mcts.search(obs_dict, agent_deck, opponent_deck_pred, is_training=IS_TRAINING, temperature=temperature, valid_mask=valid_mask)
+            selections = mcts.search(
+                obs_dict, agent_deck, opponent_deck_pred, 
+                is_training=IS_TRAINING, temperature=temperature, 
+                valid_mask=valid_mask, action_phases=action_phases, 
+                phase_budgeting=True
+            )
             
     # Original options were not mutated, so no need to restore.
     
@@ -377,7 +389,15 @@ def agent(obs_dict: dict) -> list[int]:
                 valid_probs = np.zeros(len(options))
                 for i, is_v in enumerate(valid_mask):
                     if is_v:
-                        valid_probs[i] = 1.0
+                        opt = options[i]
+                        opt_type = opt["type"] if isinstance(opt, dict) else getattr(opt, "type", None)
+                        
+                        if opt_type == 13: # ATTACK
+                            valid_probs[i] = 100.0 # Combat Bias: Massive attack weight
+                        elif opt_type == 8: # ATTACH
+                            valid_probs[i] = 5.0 # Combat Bias: Moderate attach weight
+                        else:
+                            valid_probs[i] = 1.0
                             
                 # Failsafe: If everything valid was masked out somehow, just allow the first option
                 if valid_probs.sum() == 0:

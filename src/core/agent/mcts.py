@@ -64,7 +64,7 @@ class MCTSEngine:
         self.num_simulations = num_simulations
         self.c_puct = c_puct
         
-    def search(self, obs_dict: dict, agent_deck: list, opponent_deck_pred: list, is_training: bool = False, temperature: float = 1.0, epsilon: float = 0.25, alpha: float = 0.3, valid_mask: list = None) -> List[int]:
+    def search(self, obs_dict: dict, agent_deck: list, opponent_deck_pred: list, is_training: bool = False, temperature: float = 1.0, epsilon: float = 0.25, alpha: float = 0.3, valid_mask: list = None, action_phases: dict = None, phase_budgeting: bool = False) -> List[int]:
         if cg_api is None:
             return []
             
@@ -125,16 +125,67 @@ class MCTSEngine:
             root_noise = np.random.dirichlet([alpha] * len(root.untried_actions))
             root_noise_map = {action: noise for action, noise in zip(root.untried_actions, root_noise)}
             
-        for _ in range(self.num_simulations):
+        phase_schedule = []
+        if phase_budgeting and action_phases and root.untried_actions:
+            phases_present = {}
+            for a in root.untried_actions:
+                p = action_phases.get(a, 0)
+                if p not in phases_present:
+                    phases_present[p] = []
+                phases_present[p].append(a)
+                
+            if len(phases_present) > 0:
+                sims_per_phase = self.num_simulations // len(phases_present)
+                for p in sorted(phases_present.keys()):
+                    phase_schedule.extend([p] * sims_per_phase)
+                leftover = self.num_simulations - len(phase_schedule)
+                phase_schedule.extend([-1] * leftover)
+
+        for sim_idx in range(self.num_simulations):
             node = root
             
+            allowed_root_phase = -1
+            if phase_budgeting and action_phases and sim_idx < len(phase_schedule):
+                allowed_root_phase = phase_schedule[sim_idx]
+            
             # 1. Select
-            while node.untried_actions is not None and len(node.untried_actions) == 0 and len(node.children) > 0:
-                node = max(node.children, key=lambda c: c.ucb1(self.c_puct))
+            while node.untried_actions is not None:
+                has_untried = len(node.untried_actions) > 0
+                
+                valid_untried = []
+                valid_children = []
+                
+                if node == root and allowed_root_phase != -1:
+                    valid_untried = [a for a in node.untried_actions if action_phases.get(a, 0) == allowed_root_phase]
+                    valid_children = [c for c in node.children if action_phases.get(c.action, 0) == allowed_root_phase]
+                    
+                    if not valid_untried and not valid_children:
+                        allowed_root_phase = -1
+                    else:
+                        has_untried = len(valid_untried) > 0
+                        
+                if has_untried:
+                    break
+                    
+                if len(node.children) == 0:
+                    break
+                    
+                if node == root and allowed_root_phase != -1:
+                    node = max(valid_children, key=lambda c: c.ucb1(self.c_puct))
+                else:
+                    node = max(node.children, key=lambda c: c.ucb1(self.c_puct))
                     
             # 2. Expand
             if not node.is_terminal and node.untried_actions is not None and len(node.untried_actions) > 0:
-                action = node.untried_actions.pop()
+                if node == root and allowed_root_phase != -1:
+                    valid_untried = [a for a in node.untried_actions if action_phases.get(a, 0) == allowed_root_phase]
+                    if valid_untried:
+                        action = valid_untried[-1]
+                        node.untried_actions.remove(action)
+                    else:
+                        action = node.untried_actions.pop()
+                else:
+                    action = node.untried_actions.pop()
                 
                 try:
                     new_state = cg_api.search_step(node.search_state.searchId, [action])

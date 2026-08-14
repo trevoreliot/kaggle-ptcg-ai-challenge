@@ -20,14 +20,19 @@ def load_data(csv_path):
         import json
         import csv
         
-        try:
-            with open(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "reward", "reward_shaping.json"), "r") as f:
-                reward_keys = sorted(list(json.load(f).keys()))
-            correct_header = ["Episode", "Opponent_Deck", "Reward"]
-            for k in reward_keys:
-                correct_header.extend([f"Count_{k}", f"Total_{k}"])
-        except:
-            correct_header = None
+        is_reward_file = csv_path.endswith('_reward_metrics.csv')
+        
+        if is_reward_file:
+            try:
+                with open(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "reward", "reward_shaping.json"), "r") as f:
+                    reward_keys = sorted(list(json.load(f).keys()))
+                correct_header = ["Episode", "Opponent_Deck", "Reward"]
+                for k in reward_keys:
+                    correct_header.extend([f"Count_{k}", f"Total_{k}"])
+            except:
+                correct_header = None
+        else:
+            correct_header = ["Episode", "Opponent_Deck", "Reward", "Episode_Length", "Policy_Loss", "Value_Loss"]
             
         if correct_header:
             parsed_rows = []

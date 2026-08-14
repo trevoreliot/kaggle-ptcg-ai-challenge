@@ -345,7 +345,27 @@ def calculate_step_reward(parsed_obs, tracker):
                     step_reward += _track_reward(tracker, "r_excessive_retreat_penalty", -0.5)
                 else:
                     tracker["last_retreat_turn"] = current_turn
-                    step_reward += _track_reward(tracker, "r_retreat", REWARD_CONFIG.get("r_retreat", 0.10))
+                    prev_serial = tracker["my_active_serial"]
+                    prev_active = next((p for p in my_player.bench if p is not None and p.serial == prev_serial), None)
+                    
+                    if prev_active is not None:
+                        if prev_active.hp < prev_active.maxHp * 0.5:
+                            survival_reward = REWARD_CONFIG.get("r_retreat_survival", 2.0)
+                            step_reward += _track_reward(tracker, "r_retreat_survival", survival_reward)
+                            print(f"\\n[REWARD] 🏃‍♂️ TACTICAL SURVIVAL RETREAT! (+{survival_reward:.2f}) 🏃‍♂️\\n")
+                        elif prev_active.hp == prev_active.maxHp:
+                            opp_active = opp_player.active[0] if opp_player.active and opp_player.active[0] is not None else None
+                            opp_dmg = ATTACK_DAMAGE_LOOKUP.get(opp_active.id, 100) if opp_active else 0
+                            if opp_dmg < prev_active.hp:
+                                penalty = REWARD_CONFIG.get("r_retreat_unnecessary_penalty", -1.5)
+                                step_reward += _track_reward(tracker, "r_retreat_unnecessary_penalty", penalty)
+                                print(f"\\n[REWARD] ⚠️ UNNECESSARY RETREAT PENALTY! ({penalty:.2f}) ⚠️\\n")
+                            else:
+                                step_reward += _track_reward(tracker, "r_retreat", REWARD_CONFIG.get("r_retreat", 0.10))
+                        else:
+                            step_reward += _track_reward(tracker, "r_retreat", REWARD_CONFIG.get("r_retreat", 0.10))
+                    else:
+                        step_reward += _track_reward(tracker, "r_retreat", REWARD_CONFIG.get("r_retreat", 0.10))
                 
         # Healing Reward
         my_damage_delta = current_my_damage - tracker.get("my_damage", 0)

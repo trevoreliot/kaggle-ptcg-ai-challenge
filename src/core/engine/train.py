@@ -324,6 +324,8 @@ def run_train(episodes, workers, p1_deck_path, p2_deck_path, model_name, p2_type
                 available_p2_agents = get_available_rules_agents()
             elif p2_agent in ["aggro", "control", "prob"]:
                 available_p2_agents = get_available_rules_agents(p2_agent)
+            elif "," in p2_agent:
+                available_p2_agents = [x.strip() for x in p2_agent.split(",")]
             else:
                 available_p2_agents = [p2_agent]
         else:

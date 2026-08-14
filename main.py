@@ -38,7 +38,7 @@ def main():
         run_train(args.episodes, args.workers, args.p1_deck, args.opp_deck, args.model_name, args.p2_type, args.p2_agent, args.debug, args.epsilon, args.alpha)
     elif args.mode == "evaluate":
         from src.core.engine.evaluate import run_evaluate
-        run_evaluate(args.episodes, args.p1_deck, args.opp_deck, args.model_name, args.p2_type, args.p2_agent)
+        run_evaluate(args.episodes, args.workers, args.p1_deck, args.opp_deck, args.model_name, args.p2_type, args.p2_agent, args.alpha)
 
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn", force=True)

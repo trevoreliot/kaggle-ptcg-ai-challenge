@@ -57,8 +57,14 @@ class WorkerPool:
             
     def stop(self):
         print("[WorkerPool] Stopping processes...")
+        # Give processes a moment to cleanly exit via poison pill and release shared CUDA memory
         for p in self.actor_processes:
             if p.is_alive():
+                p.join(timeout=2.0)
+                
+        for p in self.actor_processes:
+            if p.is_alive():
+                print(f"[WorkerPool] Force terminating hanging worker {p.pid}...")
                 p.terminate()
                 
         self.server.stop()
