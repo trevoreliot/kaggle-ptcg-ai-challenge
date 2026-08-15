@@ -115,6 +115,37 @@ def eval_worker_run_episode(p1_deck_path, p2_deck_path, model_name, p2_type, p2_
                     kos += (p2_prizes - p2_cur)
                     p2_prizes = p2_cur
                     
+    import json as sys_json
+    env_json = env.toJSON()
+    payload = ""
+    if "steps" in env_json and len(env_json["steps"]) > 0 and len(env_json["steps"][0]) > 0 and "visualize" in env_json["steps"][0][0]:
+        payload = sys_json.dumps(env_json["steps"][0][0]["visualize"])
+    else:
+        payload = sys_json.dumps(env_json)
+        
+    html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /></head>
+<body>
+    <div style="text-align: center; margin-top: 20px; font-family: sans-serif;">Loading visualizer...</div>
+    <script>
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = "https://ptcgvis.heroz.jp/Visualizer/Replay/0";
+        form.target = "_self";
+        
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "json";
+        input.value = {sys_json.dumps(payload)};
+        
+        form.appendChild(input);
+        document.body.appendChild(form);
+        form.submit();
+    </script>
+</body>
+</html>"""
+    
     res = {
         "reward": reward,
         "ep_len": ep_len,
@@ -124,7 +155,7 @@ def eval_worker_run_episode(p1_deck_path, p2_deck_path, model_name, p2_type, p2_
         "first_prize": 1 if first_prize == "p1" else 0,
         "kos": kos,
         "opponent": p2_agent_name,
-        "html": env.render(mode="html")
+        "html": html
     }
     return res
 

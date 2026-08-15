@@ -17,24 +17,67 @@ tab1, tab2, tab3 = st.tabs(["Latest Replay", "Evaluation Diagnostics", "Training
 # Tab 1: Latest Replay
 with tab1:
     st.header("Latest Interactive Replay")
-    meta_path = os.path.join(ROOT_DIR, "assets", "results", "diagnostics", "latest_replay_meta.json")
-    if os.path.exists(meta_path):
-        with open(meta_path, "r") as f:
-            meta = json.load(f)
-        reward = meta.get("reward", 0)
-        opp = meta.get("opponent", "Opponent")
-        if reward == 1:
-            st.success(f"🏆 Victory! You won against {opp}.")
-        elif reward == -1:
-            st.error(f"💀 Defeat. You lost to {opp}.")
-        else:
-            st.warning(f"🤝 Draw against {opp}.")
-            
     replay_path = os.path.join(ROOT_DIR, "assets", "results", "diagnostics", "latest_replay.html")
     if os.path.exists(replay_path):
         with open(replay_path, "r") as f:
             html_data = f.read()
-        components.html(html_data, height=800, scrolling=True)
+            
+        if "waiting_for_turn" not in st.session_state:
+            st.session_state["waiting_for_turn"] = 0
+            
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            components.html(html_data, height=1400, scrolling=True)
+            
+        with col2:
+            st.markdown('<div style="height: 1000px;"></div>', unsafe_allow_html=True)
+            
+            options_path = os.path.join(ROOT_DIR, "assets", "results", "diagnostics", "human_options.json")
+            if os.path.exists(options_path):
+                st.session_state["waiting_for_turn"] = 0
+                try:
+                    import json
+                    with open(options_path, "r") as f:
+                        opt_data = json.load(f)
+                    
+                    min_count = opt_data.get('min_count', 1)
+                    max_count = opt_data.get('max_count', 1)
+                    turn = opt_data.get('turn', 0)
+                    
+                    if max_count > 1:
+                        st.write(f"### Action Required: {opt_data.get('context', 'Choose an action')} (Select {min_count} to {max_count})")
+                        selected_indices = []
+                        for i, opt_text in enumerate(opt_data.get("options", [])):
+                            if st.checkbox(opt_text, key=f"opt_cb_{turn}_{i}"):
+                                selected_indices.append(i)
+                                
+                        if min_count <= len(selected_indices) <= max_count:
+                            if st.button("Submit Actions", use_container_width=True):
+                                action_path = os.path.join(ROOT_DIR, "assets", "results", "diagnostics", "human_action.txt")
+                                with open(action_path, "w") as f:
+                                    f.write(",".join(map(str, selected_indices)))
+                                os.remove(options_path)
+                                st.session_state["waiting_for_turn"] = 60
+                                st.rerun()
+                    else:
+                        st.write(f"### Action Required: {opt_data.get('context', 'Choose an action')}")
+                        for i, opt_text in enumerate(opt_data.get("options", [])):
+                            if st.button(opt_text, key=f"action_btn_{turn}_{i}", use_container_width=True):
+                                action_path = os.path.join(ROOT_DIR, "assets", "results", "diagnostics", "human_action.txt")
+                                with open(action_path, "w") as f:
+                                    f.write(str(i))
+                                os.remove(options_path)
+                                st.session_state["waiting_for_turn"] = 60
+                                st.rerun()
+                except Exception as e:
+                    pass
+            elif st.session_state["waiting_for_turn"] > 0:
+                st.info(f"⏳ Waiting for opponent... ({st.session_state['waiting_for_turn']}s)")
+                import time
+                time.sleep(1)
+                st.session_state["waiting_for_turn"] -= 1
+                st.rerun()
     else:
         st.info("No replay found. Run `uv run python main.py --mode evaluate` to generate one.")
 

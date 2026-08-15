@@ -311,6 +311,8 @@ class LucarioPolicy:
                     if target_index != 0 and not self.can_gust:
                         break
 
+                    damage = base_damage
+                    
                     # Crustle wall counterplay
                     my_data = card_table[my_pokemon.id]
                     crustle_immune = (

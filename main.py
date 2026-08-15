@@ -7,8 +7,8 @@ def main():
                         help="Path or name of Player 1's deck CSV.")
     parser.add_argument("--opp-deck", type=str, default="all",
                         help="Path to specific deck, folder of decks, or 'all'.")
-    parser.add_argument("--mode", type=str, choices=["play", "train", "evaluate"], default="play",
-                        help="Execution mode: 'play' to save an HTML trace, 'train' for headless fast simulation, 'evaluate' for diagnostics.")
+    parser.add_argument("--mode", type=str, choices=["play", "train", "evaluate", "assist"], default="play",
+                        help="Execution mode: 'play' to save an HTML trace, 'train' for headless fast simulation, 'evaluate' for diagnostics, 'assist' for human-in-the-loop.")
     parser.add_argument("--episodes", type=int, default=1,
                         help="Number of matches to simulate (only used in 'train' or 'evaluate' mode).")
     parser.add_argument("--workers", type=int, default=1,
@@ -39,6 +39,11 @@ def main():
     elif args.mode == "evaluate":
         from src.core.engine.evaluate import run_evaluate
         run_evaluate(args.episodes, args.workers, args.p1_deck, args.opp_deck, args.model_name, args.p2_type, args.p2_agent, args.alpha)
+    elif args.mode == "assist":
+        from src.core.agent import agent as agent_module
+        agent_module.HUMAN_ASSIST = True
+        from src.core.engine.play import run_play
+        run_play(args.p1_deck, args.opp_deck, args.p2_type, args.p2_agent)
 
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn", force=True)

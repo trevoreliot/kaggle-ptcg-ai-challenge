@@ -1,3 +1,4 @@
+print("AGENT CALLED!")
 import random
 import os
 import json
@@ -325,6 +326,96 @@ def agent(obs_dict: dict) -> list[int]:
     alpha = globals().get("CURRENT_ALPHA", 0.0)
     
     # Execute Search
+    if globals().get("HUMAN_ASSIST", False):
+        if True:
+            # We must import at function level because tui.py uses modules that might not be fully initialized or we just avoid top-level dependencies forkaggle
+            from src.core.agent.tui import render_board_html, format_option
+            
+            # Extract mid-game replay JSON if possible
+            import json as sys_json
+            import src.core.agent.agent as agent_module
+            replay_payload = "{}"
+            if hasattr(agent_module, "_local_env_ref"):
+                try:
+                    env = agent_module._local_env_ref
+                    env_json = env.toJSON()
+                    if "steps" in env_json and len(env_json["steps"]) > 0 and len(env_json["steps"][0]) > 0 and "visualize" in env_json["steps"][0][0]:
+                        replay_payload = sys_json.dumps(env_json["steps"][0][0]["visualize"])
+                    else:
+                        replay_payload = sys_json.dumps(env_json)
+                except Exception:
+                    pass
+            
+            html = render_board_html(parsed_obs, replay_payload)
+            os.makedirs(os.path.join("assets", "results", "diagnostics"), exist_ok=True)
+            path = os.path.join("assets", "results", "diagnostics", "latest_replay.html")
+            with open(path, "w") as f:
+                f.write(html)
+            
+            import sys
+            from src.core.agent.tui import CONTEXT_MAP
+            
+            context_id = parsed_obs.select.context if parsed_obs.select else 0
+            context_str = CONTEXT_MAP.get(context_id, f"Context {context_id}")
+            
+            print(f"\n--- HUMAN ASSIST MODE ---", file=sys.__stdout__, flush=True)
+            print(f"Turn: {parsed_obs.current.turn}", file=sys.__stdout__, flush=True)
+            print(f"Action Context: {context_str}", file=sys.__stdout__, flush=True)
+            print(f"Board state rendered to {path}. Refresh your dashboard!", file=sys.__stdout__, flush=True)
+            options_path = os.path.join("assets", "results", "diagnostics", "human_options.json")
+            action_path = os.path.join("assets", "results", "diagnostics", "human_action.txt")
+            
+            import json
+            import select
+            
+            opt_texts = [format_option(opt, parsed_obs) for opt in valid_options_parsed]
+            min_c = parsed_obs.select.minCount if parsed_obs.select else 1
+            max_c = parsed_obs.select.maxCount if parsed_obs.select else 1
+            with open(options_path, "w") as f:
+                json.dump({
+                    "options": opt_texts, 
+                    "turn": parsed_obs.current.turn, 
+                    "context": context_str,
+                    "min_count": min_c,
+                    "max_count": max_c
+                }, f)
+                
+            if os.path.exists(action_path):
+                os.remove(action_path)
+
+            print("Available Options:", file=sys.__stdout__, flush=True)
+            for i, opt in enumerate(valid_options_parsed):
+                print(f"[{i}] {opt_texts[i]}", file=sys.__stdout__, flush=True)
+                
+            sys.__stdout__.write("Select action index in Dashboard, or type here (or type 'agent'): ")
+            sys.__stdout__.flush()
+            
+            user_input = None
+            while True:
+                if os.path.exists(action_path):
+                    with open(action_path, "r") as f:
+                        user_input = f.read().strip()
+                    os.remove(action_path)
+                    break
+                
+                r, _, _ = select.select([sys.__stdin__], [], [], 0.5)
+                if r:
+                    user_input = sys.__stdin__.readline().strip()
+                    break
+                    
+            if os.path.exists(options_path):
+                os.remove(options_path)
+                
+            if user_input.lower() != "agent":
+                try:
+                    choices = [int(c.strip()) for c in user_input.split(',')]
+                    valid_choices = [original_indices[c] for c in choices if 0 <= c < len(valid_options_parsed)]
+                    if len(valid_choices) == len(choices):
+                        return valid_choices
+                    print("Invalid index.", file=sys.__stdout__, flush=True)
+                except Exception:
+                    pass
+                    
     force_explore = False
     if IS_TRAINING and alpha > 0.0:
         selections = mcts.search(
